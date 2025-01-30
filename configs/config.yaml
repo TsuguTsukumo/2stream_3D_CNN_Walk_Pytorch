@@ -9,29 +9,23 @@ hydra:
     subdir: ${train.experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweeper:
     _target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
-    params: 
+    params:
       filter.phase: mix, stance, swing, whole
-    
+
 optimizer:
   lr: 0.0001
   beta1: 0.5
   beta2: 0.999
 
 data:
-  # seg_data_path: /workspace/data/segmentation_dataset_512/ # segmentation dataset path
-  # # gait_seg_data_path: /workspace/data/segmentation_dataset_512/json_mix # defined gait cycle json path. This path uesd be gait cycle defined dataset. 
-  # gait_seg_data_path: /workspace/data/segmentation_dataset_512/json_mix_with_score/${filter.phase} # defined gait cycle json path. This path uesd be gait cycle defined dataset.
-  # gait_seg_index_data_path: /workspace/data/seg_gait_index_mapping_with_filter_score/${filter.phase} # training mapping path, this used for cross validation, with different class number.
-
   ap_data_path: /workspace/data/Cross_Validation/ex_20250116_ap_organized # front view dataset path
   lat_data_path: /workspace/data/Cross_Validation/ex_20250116_lat_organized # side view dataset path
 
   num_workers: 7
   img_size: 224
 
-
 model:
-  model: ${train.backbone} # the model name
+  backbone: resnet # choices=[resnet, resnext, efficientnet], help='the backbone of the model'
   model_class_num: 3 # the class num of model. 2 > [ASD, non_ASD]. 3 > [ASD, DHS, LCS_HipOA]. 4 > [ASD, DHS, LCS_HipOA, normal]
   model_depth: 50 # choices=[50, 101, 152], help='the depth of used model'
 
@@ -39,19 +33,13 @@ train:
   # Training config
   max_epochs: 50 # numer of epochs of training
 
-  # used for val 
+  # used for val
   clip_duration: 1 # clip duration for the video
   uniform_temporal_subsample_num: 8 # num frame from the clip duration, f or define one gait cycle, we need use whole frames.
 
-  # experiment: two_stream, cnn_lstm, cnn, 3dcnn
-  backbone: 3dcnn # choices=[3dcnn, 2dcnn, cnn_lstm, two_stream], help='the backbone of the model'
-  temporal_mix: True # if use the temporal mix
-
-  experiment: ${train.backbone}_${train.temporal_mix}_${filter.phase}_${filter.backbone} # the experiment name
-
   gpu_num: 0 # choices=[0, 1], help='the gpu number whicht to train'
 
-  log_path: logs/${train.experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  log_path: logs/${model.backbone}/${now:%Y-%m-%d}/${now:%H-%M-%S}
 
   fast_dev_run: False # if use the fast_dev_run
   fold: 3 # the fold number of the cross validation
