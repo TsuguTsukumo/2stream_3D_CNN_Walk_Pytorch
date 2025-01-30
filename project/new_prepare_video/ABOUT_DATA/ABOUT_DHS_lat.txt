@@ -1,0 +1,17 @@
+about DHS_lat
+    <alternate>
+        20180620
+    <only the participant>
+        20160927
+        20171127
+        20180903_1
+        20190225
+        20190924_1
+        20191016
+        20191217
+        20200528
+        20210812
+    <others>
+        20170410: With auxiliary tools.
+        20170411: Sometimes outsiders show up.(very random)
+        20170412: Sometimes outsiders show up.(very random)

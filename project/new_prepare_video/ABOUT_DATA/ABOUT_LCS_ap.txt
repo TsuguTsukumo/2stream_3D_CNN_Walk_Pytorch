@@ -1,0 +1,10 @@
+about LCS_ap
+    <only the participant>
+        20180326
+        20211012
+    <outsiders on right side>
+        20191029_2
+        20201210
+        20210608
+        20210706
+    <others>

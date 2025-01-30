@@ -1,0 +1,11 @@
+about LCS_lat
+    <alternate>
+        20180115
+    <only the participant>
+        20180326
+        20191029_2
+        20201210
+        20210608
+        20210706
+        20211012
+    <others>

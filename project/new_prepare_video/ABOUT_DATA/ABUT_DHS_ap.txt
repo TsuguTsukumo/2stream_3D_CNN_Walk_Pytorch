@@ -1,0 +1,13 @@
+about DHS_ap
+    <only the participant>
+        20190225
+        20190924_1
+        20191016
+        20191217
+    <outsiders on right side>
+        20160927
+        20171127
+        20180903_1
+        20200528
+        20210812
+    <others>

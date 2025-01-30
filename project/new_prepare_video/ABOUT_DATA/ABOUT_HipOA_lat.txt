@@ -1,0 +1,6 @@
+about HipOA_lat
+    <alternate>
+    <only the participant>
+        20170919
+        20180806
+    <others>

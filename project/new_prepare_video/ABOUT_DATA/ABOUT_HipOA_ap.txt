@@ -1,0 +1,6 @@
+about HipOA_ap
+    <only the participant>
+        20170919
+        20180806_2
+    <outsiders on right side>
+    <others>

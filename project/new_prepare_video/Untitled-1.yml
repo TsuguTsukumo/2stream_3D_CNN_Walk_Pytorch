@@ -1,0 +1,1 @@
+python project/main.py --version 1120 --model resnet --model_depth 50 --clip_duration 1  --num_workers 8 --transfor_learning True --pre_process_flag True 

@@ -1,0 +1,43 @@
+about ASD_lat
+    <alternate>
+        20170313
+        20170328
+        20171206
+        20190108: Sometimes outsiders show up.(first)
+        20190716
+        20190805
+        20190820: Sometimes outsiders show up.(random)
+        20190909
+    <only the participant>
+        20171211
+        20180123
+        20180205
+        20180312
+        20180521_1
+        20180521_2
+        20180625_1
+        20181029
+        20181204
+        20190122
+        20190507_1
+        20190507_2
+        20190514
+        20190709
+        20190819
+        20190917
+        201901028
+        20200120
+        20200121
+        20200127
+        20200317_1
+        20210309
+        20210323
+        20210427
+        20210601
+        20210803
+        20211221
+    <others>
+        20170522_1: same direction.
+        20170612_1: Sometimes outsiders show up.(random)
+        20180307: With auxiliary tools.
+        20191029_1: Sometimes outsiders show up.(very random)
