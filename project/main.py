@@ -3,7 +3,6 @@ this project were based the pytorch, pytorch lightning and pytorch video library
 for rapid development.
 '''
 
-# %%
 import os
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning import loggers as pl_loggers

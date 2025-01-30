@@ -1,5 +1,6 @@
 # %%
 from pytorchvideo.models import resnet, csn, r2plus1d, x3d, slowfast
+from torchvision.models import sl
 
 import torch
 import torch.nn as nn
