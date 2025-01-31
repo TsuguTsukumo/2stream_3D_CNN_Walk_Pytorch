@@ -1,9 +1,25 @@
-'''
-a pytorch lightning data module based dataloader, for train/val/test dataset prepare.
+#!/usr/bin/env python3
+# -*- coding:utf-8 -*-
+"""
+File: /workspace/project/project/dataloader/data_loader_multi.py
+Project: /workspace/project/project/dataloader
+Created Date: Thursday January 30th 2025
+Author: Kaixu Chen
+-----
+Comment:
 
-'''
+Have a good code time :)
+-----
+Last Modified: Thursday January 30th 2025 2:09:48 pm
+Modified By: the developer formerly known as Kaixu Chen at <chenkaixusan@gmail.com>
+-----
+Copyright (c) 2025 The University of Tsukuba
+-----
+HISTORY:
+Date      	By	Comments
+----------	---	---------------------------------------------------------
+"""
 
-# %%
 import matplotlib.pylab as plt
 
 from torchvision.transforms import (
@@ -32,10 +48,12 @@ from torch.utils.data import DataLoader
 from pytorchvideo.data.clip_sampling import ClipSampler
 from pytorchvideo.data import make_clip_sampler
 
-from pytorchvideo.data.labeled_video_dataset import LabeledVideoDataset, labeled_video_dataset
+from pytorchvideo.data.labeled_video_dataset import (
+    LabeledVideoDataset,
+    labeled_video_dataset,
+)
 from typing import Tuple
 
-# %%
 
 def WalkDataset(
     data_path_1: str,
@@ -46,8 +64,8 @@ def WalkDataset(
     video_path_prefix: str = "",
     decode_audio: bool = False,
     decoder: str = "pyav",
-) -> Tuple[LabeledVideoDataset, LabeledVideoDataset]: 
-    '''
+) -> Tuple[LabeledVideoDataset, LabeledVideoDataset]:
+    """
     A helper function to create "LabeledVideoDataset" object for the Walk dataset.
 
     Args:
@@ -62,7 +80,7 @@ def WalkDataset(
 
     Returns:
         Tuple[LabeledVideoDataset, LabeledVideoDataset]: Two dataset objects for the two video paths
-    '''
+    """
     dataset_1 = labeled_video_dataset(
         data_path_1,
         clip_sampler,
@@ -70,9 +88,9 @@ def WalkDataset(
         transform,
         video_path_prefix,
         decode_audio,
-        decoder
+        decoder,
     )
-    
+
     dataset_2 = labeled_video_dataset(
         data_path_2,
         clip_sampler,
@@ -80,21 +98,19 @@ def WalkDataset(
         transform,
         video_path_prefix,
         decode_audio,
-        decoder
+        decoder,
     )
-    
+
     return dataset_1, dataset_2
 
 
-# %%
-
-class WalkDataModule(LightningDataModule):
+class MultiData(LightningDataModule):
     def __init__(self, opt):
         super().__init__()
 
         # use this for dataloader
-        self._TRAIN_PATH_1 = opt.train_path_1
-        self._TRAIN_PATH_2 = opt.train_path_2
+        self._TRAIN_PATH_1 = opt.data.ap_data_path
+        self._TRAIN_PATH_2 = opt.data.lat_data_path
 
         self._PRE_PROCESS_FLAG = opt.pre_process_flag
 
@@ -113,17 +129,15 @@ class WalkDataModule(LightningDataModule):
                     transform=Compose(
                         [
                             # uniform clip T frames from the given n sec video.
-                            UniformTemporalSubsample(self.uniform_temporal_subsample_num),
-                            
+                            UniformTemporalSubsample(
+                                self.uniform_temporal_subsample_num
+                            ),
                             # dived the pixel from [0, 255] tp [0, 1], to save computing resources.
                             Div255(),
                             Normalize((0.45, 0.45, 0.45), (0.225, 0.225, 0.225)),
-
                             # RandomShortSideScale(min_size=256, max_size=320),
                             # RandomCrop(self._IMG_SIZE),
-
                             # ShortSideScale(self._IMG_SIZE),
-
                             Resize(size=[self._IMG_SIZE, self._IMG_SIZE]),
                             RandomHorizontalFlip(p=0.5),
                         ]
@@ -132,48 +146,24 @@ class WalkDataModule(LightningDataModule):
             ]
         )
 
-        self.raw_train_transform = Compose(
-            [
-                ApplyTransformToKey(
-                    key="video",
-                    transform=Compose(
-                        [
-                            # uniform clip T frames from the given n sec video.
-                            UniformTemporalSubsample(self.uniform_temporal_subsample_num),
-                            
-                            # dived the pixel from [0, 255] to [0, 1], to save computing resources.
-                            Div255(),
-                            Normalize((0.45, 0.45, 0.45), (0.225, 0.225, 0.225)),
-
-                            RandomShortSideScale(min_size=256, max_size=320),
-
-                            Resize(size=[self._IMG_SIZE, self._IMG_SIZE]),
-                            RandomHorizontalFlip(p=0.5),
-                        ]
-                    )
-                )
-            ]
-        )
-
     def prepare_data(self) -> None:
         pass
 
     def setup(self, stage: Optional[str] = None) -> None:
-        '''
+        """
         assign tran, val, predict datasets for use in dataloaders
 
         Args:
             stage (Optional[str], optional): trainer.stage, in ('fit', 'validate', 'test', 'predict'). Defaults to None.
-        '''
-        transform = self.train_transform if self._PRE_PROCESS_FLAG else self.raw_train_transform
+        """
 
-        # if stage == "f it" or stage == None:
+        # if stage == "fit" or stage == None:
         if stage in ("fit", None):
             self.train_dataset_1, self.train_dataset_2 = WalkDataset(
                 data_path=os.path.join(self._TRAIN_PATH_1, "train"),
                 second_data_path=os.path.join(self._TRAIN_PATH_2, "train"),
                 clip_sampler=make_clip_sampler("random", self._CLIP_DURATION),
-                transform=transform,
+                transform=self.train_transform,
             )
 
         if stage in ("fit", "validate", None):
@@ -189,7 +179,7 @@ class WalkDataModule(LightningDataModule):
                 data_path=os.path.join(self._TRAIN_PATH_1, "val"),
                 second_data_path=os.path.join(self._TRAIN_PATH_2, "val"),
                 clip_sampler=make_clip_sampler("uniform", self._CLIP_DURATION),
-                transform=transform
+                transform=transform,
             )
 
     def train_dataloader(self) -> DataLoader:
@@ -203,7 +193,7 @@ class WalkDataModule(LightningDataModule):
                 self.train_dataset_2,
                 batch_size=self._BATCH_SIZE,
                 num_workers=self._NUM_WORKERS,
-            )
+            ),
         ]
 
     def val_dataloader(self) -> DataLoader:
@@ -217,7 +207,7 @@ class WalkDataModule(LightningDataModule):
                 self.val_dataset_2,
                 batch_size=self._BATCH_SIZE,
                 num_workers=self._NUM_WORKERS,
-            )
+            ),
         ]
 
     def test_dataloader(self) -> DataLoader:
@@ -231,19 +221,5 @@ class WalkDataModule(LightningDataModule):
                 self.test_dataset_2,
                 batch_size=self._BATCH_SIZE,
                 num_workers=self._NUM_WORKERS,
-            )
-        ]
-
-    def predict_dataloader(self) -> DataLoader:
-        return [
-            DataLoader(
-                self.test_dataset_1,
-                batch_size=self._BATCH_SIZE,
-                num_workers=self._NUM_WORKERS,
             ),
-            DataLoader(
-                self.test_dataset_2,
-                batch_size=self._BATCH_SIZE,
-                num_workers=self._NUM_WORKERS,
-            )
         ]

@@ -10,7 +10,7 @@ hydra:
   sweeper:
     _target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
     params:
-      filter.phase: mix, stance, swing, whole
+      train.experiment: [single, early_fusion, late_fusion]
 
 optimizer:
   lr: 0.0001
@@ -25,11 +25,12 @@ data:
   img_size: 224
 
 model:
-  backbone: resnet # choices=[resnet, resnext, efficientnet], help='the backbone of the model'
-  model_class_num: 3 # the class num of model. 2 > [ASD, non_ASD]. 3 > [ASD, DHS, LCS_HipOA]. 4 > [ASD, DHS, LCS_HipOA, normal]
+  backbone: resnet # choices=[3dcnn], help='the backbone of the model'
+  model_class_num: 1 # the class num of model. 2 > [ASD, non_ASD]. 3 > [ASD, DHS, LCS_HipOA]. 4 > [ASD, DHS, LCS_HipOA, normal]
   model_depth: 50 # choices=[50, 101, 152], help='the depth of used model'
 
 train:
+
   # Training config
   max_epochs: 50 # numer of epochs of training
 
@@ -39,8 +40,9 @@ train:
 
   gpu_num: 0 # choices=[0, 1], help='the gpu number whicht to train'
 
-  log_path: logs/${model.backbone}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  experiment: late_fusion # choices=[single, early_fusion, late_fusion], help='the different feature fusion method'
+  log_path: logs/${model.backbone}/${train.experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}
 
   fast_dev_run: False # if use the fast_dev_run
-  fold: 3 # the fold number of the cross validation
+  fold: 5 # the fold number of the cross validation
   current_fold: ?? # the current fold number of the cross validation

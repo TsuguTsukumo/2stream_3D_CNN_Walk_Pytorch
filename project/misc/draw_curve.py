@@ -12,7 +12,7 @@ import sys
 
 sys.path.append('/workspace/Walk_Video_PyTorch/project')
 
-from project.project.train import WalkVideoClassificationLightningModule
+from project.project.trainer.early_fusion import WalkVideoClassificationLightningModule
 from dataloader.data_loader import WalkDataModule
 from pytorchvideo.transforms.functional import uniform_temporal_subsample
 
