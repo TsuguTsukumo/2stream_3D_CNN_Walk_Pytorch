@@ -136,7 +136,7 @@ def save_CM(all_pred: list, all_label: list, save_path: str, num_class: int, fol
 
     confusion_matrix_data = _confusion_matrix(all_pred, all_label).cpu().numpy() * 100
 
-    axis_labels = ["ASD", "DHS", "LCS_HipOA"]
+    axis_labels = ["ASD", "non-ASD",]
 
     plt.figure(figsize=(8, 6))
     sns.heatmap(
