@@ -1,0 +1,48 @@
+# hydra config
+hydra:
+  run:
+    dir: ${train.log_path}
+  job:
+    chdir: false
+  sweep:
+    dir: logs/
+    subdir: ${train.experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweeper:
+    _target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
+    params:
+      train.experiment: [single, early_fusion, late_fusion]
+
+optimizer:
+  lr: 0.0001
+  beta1: 0.5
+  beta2: 0.999
+
+data:
+  ap_data_path: /workspace/data/Cross_Validation/ex_20250116_ap_organized # front view dataset path
+  lat_data_path: /workspace/data/Cross_Validation/ex_20250116_lat_organized # side view dataset path
+
+  num_workers: 7
+  img_size: 224
+  batch_size: 8
+
+  # used for val
+  clip_duration: 1 # clip duration for the video
+  uniform_temporal_subsample_num: 8 # num frame from the clip duration, f or define one gait cycle, we need use whole frames.
+
+model:
+  backbone: resnet # choices=[3dcnn], help='the backbone of the model'
+  model_class_num: 1 # the class num of model. 2 > [ASD, non_ASD]. 3 > [ASD, DHS, LCS_HipOA]. 4 > [ASD, DHS, LCS_HipOA, normal]
+  model_depth: 50 # choices=[50, 101, 152], help='the depth of used model'
+
+train:
+  # Training config
+  max_epochs: 50 # numer of epochs of training
+
+  gpu_num: 0 # choices=[0, 1], help='the gpu number whicht to train'
+
+  experiment: late_fusion # choices=[single, early_fusion, late_fusion, slow_fusion], help='the different feature fusion method'
+  log_path: logs/${model.backbone}/${train.experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+  fast_dev_run: False # if use the fast_dev_run
+  fold: 5 # the fold number of the cross validation
+  current_fold: ?? # the current fold number of the cross validation

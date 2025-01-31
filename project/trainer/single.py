@@ -1,24 +1,46 @@
-# %%
+#!/usr/bin/env python3
+# -*- coding:utf-8 -*-
+'''
+File: /workspace/project/project/trainer/early_fusion copy 2.py
+Project: /workspace/project/project/trainer
+Created Date: Friday January 31st 2025
+Author: Kaixu Chen
+-----
+Comment:
+
+Have a good code time :)
+-----
+Last Modified: Friday January 31st 2025 7:31:19 am
+Modified By: the developer formerly known as Kaixu Chen at <chenkaixusan@gmail.com>
+-----
+Copyright (c) 2025 The University of Tsukuba
+-----
+HISTORY:
+Date      	By	Comments
+----------	---	---------------------------------------------------------
+'''
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np 
 
-from models.make_model import MakeVideoModule, early_fusion, late_fusion, single_frame
+from project.models.make_model import single
 
 from pytorch_lightning import LightningModule
 
-from utils.metrics import *
-
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from torchmetrics.classification import (
+    MulticlassAccuracy,
+    MulticlassPrecision,
+    MulticlassRecall,
+    MulticlassF1Score,
+    MulticlassConfusionMatrix
+)
 
 import matplotlib.pyplot as plt 
 import seaborn as sns
 import torchmetrics
 
-# %%
-
-class WalkVideoClassificationLightningModule(LightningModule):
+class SingleTrainer(LightningModule):
     
     def __init__(self, hparams):
         super().__init__()
@@ -40,27 +62,6 @@ class WalkVideoClassificationLightningModule(LightningModule):
             if self.model_type == 'resnet':
                 self.model=self.model.make_walk_resnet()
 
-            elif self.model_type == 'r2plus1d':
-                self.model = self.model.make_walk_r2plus1d()
-
-            elif self.model_type == 'csn':
-                self.model=self.model.make_walk_csn()
-
-            elif self.model_type == 'x3d':
-                self.model = self.model.make_walk_x3d()
-
-            elif self.model_type == 'slowfast':
-                self.model = self.model.make_walk_slow_fast()
-
-            elif self.model_type == 'i3d':
-                self.model = self.model.make_walk_i3d()
-
-            elif self.model_type == 'c2d':
-                self.model = self.model.make_walk_c2d()
-
-
-        elif self.fusion_method == 'single_frame':
-            self.model = single_frame(hparams)
         elif self.fusion_method == 'early_fusion':
             self.model = early_fusion(hparams)
         elif self.fusion_method == 'late_fusion':
@@ -78,12 +79,6 @@ class WalkVideoClassificationLightningModule(LightningModule):
         self._precision = get_Precision(self.num_class)
         self._confusion_matrix = get_Confusion_Matrix()
         self.f1_score = torchmetrics.F1Score(task="binary", num_classes=self.num_class)
-
-        # self.dice = get_Dice()
-        # self.average_precision = get_Average_precision(self.num_class)
-        # self.AUC = get_AUC()
-        # self.f1_score = get_F1Score()
-        # self.precision_recall = get_Precision_Recall()
         
     def forward(self, x):
         return self.model(x)

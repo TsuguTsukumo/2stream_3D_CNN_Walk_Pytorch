@@ -29,7 +29,7 @@ import torch
 from torch.utils.data import DataLoader
 from pytorchvideo.data.clip_sampling import ClipSampler
 from pytorchvideo.data import make_clip_sampler
-from pytorch_lightning.trainer.supporters import CombinedLoader
+from pytorch_lightning.utilities.combined_loader import CombinedLoader
 
 from pytorchvideo.data.labeled_video_dataset import (
     LabeledVideoDataset,

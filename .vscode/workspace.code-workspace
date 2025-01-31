@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{	
+			"name": "project",
+			"path": "/workspace/project"
+		},
+		{
+			"name": "data",
+			"path": "/workspace/data"
+		}
+	]
+}
