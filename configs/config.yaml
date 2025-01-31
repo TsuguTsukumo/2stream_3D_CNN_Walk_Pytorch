@@ -10,7 +10,7 @@ hydra:
   sweeper:
     _target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
     params:
-      train.experiment: [early_fusion, late_fusion, slow_fusion]
+      train.experiment: early_fusion, late_fusion, slow_fusion
 
 optimizer:
   lr: 0.0001
