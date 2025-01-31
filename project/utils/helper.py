@@ -10,7 +10,7 @@ Comment:
 
 Have a good code time :)
 -----
-Last Modified: Friday January 31st 2025 9:10:46 am
+Last Modified: Friday January 31st 2025 11:46:07 am
 Modified By: the developer formerly known as Kaixu Chen at <chenkaixusan@gmail.com>
 -----
 Copyright (c) 2025 The University of Tsukuba
@@ -27,12 +27,12 @@ import seaborn as sns
 import torch
 
 from torchmetrics.classification import (
-    MulticlassAccuracy,
-    MulticlassPrecision,
-    MulticlassRecall,
-    MulticlassF1Score,
-    MulticlassConfusionMatrix,
-    MulticlassAUROC,
+    BinaryAccuracy,
+    BinaryPrecision,
+    BinaryRecall,
+    BinaryF1Score,
+    BinaryAUROC,
+    BinaryConfusionMatrix,
 )
 
 def save_inference(all_pred: list, all_label: list, fold: str, save_path: str):
@@ -82,12 +82,12 @@ def save_metrics(all_pred: list, all_label: list, fold: str, save_path: str, num
     all_pred = torch.tensor(all_pred)
     all_label = torch.tensor(all_label)
 
-    _accuracy = MulticlassAccuracy(num_class)
-    _precision = MulticlassPrecision(num_class)
-    _recall = MulticlassRecall(num_class)
-    _f1_score = MulticlassF1Score(num_class)
-    _auroc = MulticlassAUROC(num_class)
-    _confusion_matrix = MulticlassConfusionMatrix(num_class, normalize="true")
+    _accuracy = BinaryAccuracy()
+    _precision = BinaryPrecision()
+    _recall = BinaryRecall()
+    _f1_score = BinaryF1Score()
+    _auroc = BinaryAUROC()
+    _confusion_matrix = BinaryConfusionMatrix()
 
     logging.info("*" * 100)
     logging.info("accuracy: %s" % _accuracy(all_pred, all_label))
@@ -109,7 +109,6 @@ def save_metrics(all_pred: list, all_label: list, fold: str, save_path: str, num
         f.writelines("#" * 100)
         f.writelines("\n")
 
-
 def save_CM(all_pred: list, all_label: list, save_path: str, num_class: int, fold: str):
     """save the confusion matrix to file.
 
@@ -128,7 +127,7 @@ def save_CM(all_pred: list, all_label: list, save_path: str, num_class: int, fol
     if save_path.exists() is False:
         save_path.mkdir(parents=True)
 
-    _confusion_matrix = MulticlassConfusionMatrix(num_class, normalize="true")
+    _confusion_matrix = BinaryConfusionMatrix()
 
     logging.info("_confusion_matrix: %s" % _confusion_matrix(all_pred, all_label))
 

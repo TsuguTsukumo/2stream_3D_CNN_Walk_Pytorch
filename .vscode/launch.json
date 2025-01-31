@@ -5,13 +5,37 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "fusion_model",
+            "name": "late_fusion",
             "type": "debugpy",
             "request": "launch",
             "module": "project.main",
             "console": "integratedTerminal",
             "args": [
                 "train.experiment=late_fusion",
+                "data.batch_size=8"
+            ]
+        },
+        {
+            "name": "slow_fusion",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "project.main",
+            "console": "integratedTerminal",
+            "args": [
+                "train.experiment=slow_fusion",
+                "train.gpu_num=1",
+                "data.batch_size=8"
+            ]
+        },
+        {
+            "name": "early_fusion",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "project.main",
+            "console": "integratedTerminal",
+            "args": [
+                "train.experiment=early_fusion",
+                "train.gpu_num=1",
                 "data.batch_size=8"
             ]
         }

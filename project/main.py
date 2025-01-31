@@ -42,6 +42,7 @@ from project.dataloader.data_loader_multi import MultiData
 # compare experiment
 from project.trainer.late_fusion import LateFusionTrainer
 from project.trainer.early_fusion import EarlyFusionTrainer
+from project.trainer.slow_fusion import SlowFusionTrainer
 from project.trainer.single import SingleTrainer
 
 import hydra
@@ -57,6 +58,10 @@ def train(hparams: DictConfig):
     if hparams.train.experiment == "late_fusion":
         logging.info("Late Fusion")
         trainer = LateFusionTrainer(hparams)
+
+    elif hparams.train.experiment == "slow_fusion":
+        logging.info("Slow Fusion")
+        trainer = SlowFusionTrainer(hparams)
 
     elif hparams.train.experiment == "early_fusion":
         logging.info("Early Fusion")
@@ -74,7 +79,7 @@ def train(hparams: DictConfig):
     if hparams.train.experiment == "single":
         data_module = WalkDataModule(hparams)
 
-    elif hparams.train.experiment in ["late_fusion", "early_fusion"]:
+    elif hparams.train.experiment in ["late_fusion", "early_fusion", "slow_fusion"]:
         data_module = MultiData(hparams)
 
     else:
@@ -106,7 +111,7 @@ def train(hparams: DictConfig):
 
     pl_trainer = Trainer(
         devices=[
-            hparams.train.gpu_num,
+            int(hparams.train.gpu_num),
         ],
         accelerator="gpu",
         max_epochs=hparams.train.max_epochs,
@@ -172,5 +177,5 @@ def init_params(config):
 
 if __name__ == "__main__":
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    os.environ["HYDRA_FULL_ERROR"] = "1"
     init_params()

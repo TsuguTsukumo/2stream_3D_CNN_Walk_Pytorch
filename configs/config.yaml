@@ -6,11 +6,11 @@ hydra:
     chdir: false
   sweep:
     dir: logs/
-    subdir: ${train.experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${model.backbone}/${train.experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweeper:
     _target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
     params:
-      train.experiment: [single, early_fusion, late_fusion]
+      train.experiment: [early_fusion, late_fusion, slow_fusion]
 
 optimizer:
   lr: 0.0001
@@ -44,5 +44,5 @@ train:
   log_path: logs/${model.backbone}/${train.experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}
 
   fast_dev_run: False # if use the fast_dev_run
-  fold: 5 # the fold number of the cross validation
+  fold: 3 # the fold number of the cross validation
   current_fold: ?? # the current fold number of the cross validation

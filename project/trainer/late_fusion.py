@@ -10,7 +10,7 @@ Comment:
 
 Have a good code time :)
 -----
-Last Modified: Friday January 31st 2025 7:31:17 am
+Last Modified: Friday January 31st 2025 11:46:07 am
 Modified By: the developer formerly known as Kaixu Chen at <chenkaixusan@gmail.com>
 -----
 Copyright (c) 2025 The University of Tsukuba
@@ -241,7 +241,7 @@ class LateFusionTrainer(LightningModule):
         """
 
         perds = outputs
-        label = batch['ap']['label'].float().squeeze()
+        label = batch['ap']['label']
 
         self.test_outputs.append(outputs)
         # tensor to list
