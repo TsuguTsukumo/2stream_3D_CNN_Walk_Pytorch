@@ -34,6 +34,10 @@ model:
   model_class_num: 1 # the class num of model. 2 > [ASD, non_ASD]. 3 > [ASD, DHS, LCS_HipOA]. 4 > [ASD, DHS, LCS_HipOA, normal]
   model_depth: 50 # choices=[50, 101, 152], help='the depth of used model'
 
+device:
+  device: auto # choices=[auto, 1, 2], help='how many gpu to use'
+  gpu_num: 0
+
 train:
   # Training config
   max_epochs: 50 # numer of epochs of training

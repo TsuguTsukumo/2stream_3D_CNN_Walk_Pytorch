@@ -110,13 +110,11 @@ def train(hparams: DictConfig):
     )
 
     pl_trainer = Trainer(
-        devices=[
-            int(hparams.train.gpu_num),
-        ],
+        devices=hparams.device.device,
+        strategy="auto",
         accelerator="gpu",
         max_epochs=hparams.train.max_epochs,
         logger=tb_logger,
-        #   log_every_n_steps=100,
         check_val_every_n_epoch=1,
         callbacks=[
             model_check_point,
