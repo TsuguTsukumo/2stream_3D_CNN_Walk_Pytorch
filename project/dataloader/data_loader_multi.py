@@ -243,8 +243,8 @@ class MultiData(LightningDataModule):
 
         if stage in ("predict", "test", None):
             self.test_dataset_1, self.test_dataset_2 = WalkDataset(
-                data_path_ap=os.path.join(self._TRAIN_PATH_1, self.current_fold, "test"),
-                data_path_lat=os.path.join(self._TRAIN_PATH_2, self.current_fold, "test"),
+                data_path_ap=os.path.join(self._TRAIN_PATH_1, self.current_fold, "val"),
+                data_path_lat=os.path.join(self._TRAIN_PATH_2, self.current_fold, "val"),
                 clip_sampler=make_clip_sampler("uniform", self._CLIP_DURATION),
                 video_sampler=torch.utils.data.SequentialSampler,
                 transform=self.train_transform,
@@ -288,7 +288,6 @@ class MultiData(LightningDataModule):
             mode="max_size_cycle",
         )
     
-    # TODO: change the test data loader
     def test_dataloader(self) -> DataLoader:
         
         combined_loader = {

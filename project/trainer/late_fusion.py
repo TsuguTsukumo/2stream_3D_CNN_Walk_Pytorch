@@ -22,20 +22,19 @@ Date      	By	Comments
 import logging
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 from project.models.make_model import late_fusion
 
 from pytorch_lightning import LightningModule
 
-from torchmetrics.classification import (
-    MulticlassAccuracy,
-    MulticlassPrecision,
-    MulticlassRecall,
-    MulticlassF1Score,
-    MulticlassConfusionMatrix
-)
+# from torchmetrics.classification import (
+#     MulticlassAccuracy,
+#     MulticlassPrecision,
+#     MulticlassRecall,
+#     MulticlassF1Score,
+#     MulticlassConfusionMatrix
+# )
 
 from torchmetrics.classification import (
     BinaryAccuracy,
@@ -44,7 +43,6 @@ from torchmetrics.classification import (
     BinaryF1Score,
     BinaryConfusionMatrix,
 )
-
 
 from project.utils.helper import save_inference, save_metrics, save_CM
 
@@ -121,7 +119,7 @@ class LateFusionTrainer(LightningModule):
 
         confusion_matrix = self._confusion_matrix(preds_sigmoid, label)
 
-        self.log_dict({'train/f1:': val_f1, 'train/loss': train_loss, 'train/acc': accuracy, 'train/precision': precision}, on_step=True, on_epoch=True)
+        self.log_dict({'train/f1:': val_f1, 'train/loss': train_loss, 'train/acc': accuracy, 'train/precision': precision}, on_step=True, on_epoch=True, batch_size=label.size(0))
 
         return train_loss
 
@@ -166,7 +164,7 @@ class LateFusionTrainer(LightningModule):
         confusion_matrix = self._confusion_matrix(preds_sigmoid, label)
 
         # log the val loss and val acc, in step and in epoch.
-        self.log_dict({'val/f1:': val_f1, 'val/loss': val_loss, 'val/acc': accuracy, 'val/precision': precision}, on_step=True, on_epoch=True)
+        self.log_dict({'val/f1:': val_f1, 'val/loss': val_loss, 'val/acc': accuracy, 'val/precision': precision}, on_step=True, on_epoch=True, batch_size=label.size(0))
         
     ##############
     # test step
@@ -316,9 +314,6 @@ class LateFusionTrainer(LightningModule):
         video_info_a = batch['ap']
         video_info_b = batch['lat']
         
-        # print('vedeoname_a', video_info_a["video_name"])
-        # print('vedeoname_b', video_info_b["video_name"])
-        
         # * check tensor shape 
         video_a = video_info_a["video"]
         video_b = video_info_b["video"]
@@ -329,9 +324,6 @@ class LateFusionTrainer(LightningModule):
         label_a = video_info_a["label"]
         label_b = video_info_b["label"]
         
-        # print('label_a:', label_a)
-        # print('label_b:', label_b)
-
         assert label_a.shape ==  label_b.shape 
         
         for i in range(len(label_a)):
