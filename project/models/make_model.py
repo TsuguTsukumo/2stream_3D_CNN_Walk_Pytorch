@@ -1,183 +1,29 @@
-# %%
-from pytorchvideo.models import resnet, csn, r2plus1d, x3d, slowfast
-from torchvision.models import sl
+#!/usr/bin/env python3
+# -*- coding:utf-8 -*-
+'''
+File: /workspace/project/project/models/make_model.py
+Project: /workspace/project/project/models
+Created Date: Thursday January 30th 2025
+Author: Kaixu Chen
+-----
+Comment:
+
+Have a good code time :)
+-----
+Last Modified: Thursday January 30th 2025 2:16:42 pm
+Modified By: the developer formerly known as Kaixu Chen at <chenkaixusan@gmail.com>
+-----
+Copyright (c) 2025 The University of Tsukuba
+-----
+HISTORY:
+Date      	By	Comments
+----------	---	---------------------------------------------------------
+'''
 
 import torch
 import torch.nn as nn
-import copy
 
-
-# %%
-
-class MakeVideoModule(nn.Module):
-    '''
-    the module zoo from the PytorchVideo lib.
-
-    Args:
-        nn (_type_): 
-    '''
-
-    def __init__(self, hparams) -> None:
-
-        super().__init__()
-
-        self.model_class_num = hparams.model_class_num
-        self.model_depth = hparams.model_depth
-
-        self.transfor_learning = hparams.transfor_learning
-
-        self.fix_layer = hparams.fix_layer
-
-    def set_parameter_requires_grad(self, model: torch.nn.Module, flag:bool = True):
-
-        for param in model.parameters():
-            param.requires_grad = flag
-
-    def make_walk_csn(self):
-
-        if self.transfor_learning:
-            CSN = torch.hub.load("facebookresearch/pytorchvideo:main", model='csn_r101', pretrained=True)
-            CSN.blocks[-1].proj = nn.Linear(2048, self.model_class_num)
-        
-        else:
-            CSN = csn.create_csn(
-            input_channel=6,
-            model_depth=self.model_depth,
-            model_num_class=self.model_class_num,
-            norm=nn.BatchNorm3d,
-            activation=nn.ReLU,
-            )
-
-        return CSN
-
-    def make_walk_r2plus1d(self) -> nn.Module:
-
-        if self.transfor_learning:
-            model = torch.hub.load("facebookresearch/pytorchvideo:main", model='r2plus1d_r50', pretrained=True)
-
-            # change the head layer.
-            model.blocks[-1].proj = nn.Linear(2048, self.model_class_num)
-            model.blocks[-1].activation = None
-        
-        else:
-            model = r2plus1d.create_r2plus1d(
-                input_channel=6,
-                model_depth=self.model_depth,
-                model_num_class=self.model_class_num,
-                norm=nn.BatchNorm3d,
-                activation=nn.ReLU,
-                head_activation=None,
-            )
-
-        return model
-
-    def make_walk_c2d(self) -> nn.Module:
-
-        if self.transfor_learning:
-            model = torch.hub.load("facebookresearch/pytorchvideo:main", model='c2d_r50', pretrained=True)
-            model.blocks[-1].proj = nn.Linear(2048, self.model_class_num, bias=True)
-
-            return model
-        else:
-            print('no orignal model supported!')
-
-    def make_walk_i3d(self) -> nn.Module:
-        
-        if self.transfor_learning:
-            model = torch.hub.load("facebookresearch/pytorchvideo:main", model='i3d_r50', pretrained=True)
-            model.blocks[-1].proj = nn.Linear(2048, self.model_class_num)
-
-            return model
-        else:
-            print('no orignal model supported!')
-
-    def make_walk_x3d(self) -> nn.Module:
-
-        if self.transfor_learning:
-            model = torch.hub.load("facebookresearch/pytorchvideo:main", model='x3d_m', pretrained=True)
-            model.blocks[-1].proj = nn.Linear(2048, self.model_class_num)
-            model.blocks[-1].activation = None
-
-        else:
-            model = x3d.create_x3d(
-                input_channel=6, 
-                input_clip_length=16,
-                input_crop_size=224,
-                model_num_class=1,
-                norm=nn.BatchNorm3d,
-                activation=nn.ReLU,
-                head_activation=None,
-            )
-
-        return model
-
-    def make_walk_slow_fast(self) -> nn.Module:
-
-        if self.transfor_learning:
-            model = torch.hub.load("facebookresearch/pytorchvideo:main", model='slowfast_r50', pretrained=True)
-            model.blocks[-1].proj = nn.Linear(2048, self.model_class_num)
-
-        else:
-
-            model = slowfast.create_slowfast(
-                input_channels=6,
-                model_depth=self.model_depth,
-                model_num_class=self.model_class_num,
-                norm=nn.BatchNorm3d,
-                activation=nn.ReLU,
-            )
-
-        return model
-
-
-    def make_walk_resnet(self):
-        
-        # make model
-        if self.transfor_learning:
-            slow = torch.hub.load('facebookresearch/pytorchvideo', 'slow_r50', pretrained=True)
-            
-            slow.blocks[0].conv = nn.Conv3d(in_channels=6, out_channels=64, kernel_size=(1, 7, 7), stride=(1, 2, 2), padding=(0, 3, 3))
-            # change the knetics-400 output 400 to model class num
-            slow.blocks[-1].proj = nn.Linear(2048, self.model_class_num)
-
-            # model_stem = slow.blocks[0]
-            # model_head = slow.blocks[-1]
-            # model_stage = slow.blocks[1:-1]
-
-            # # ablation expermentional
-
-            # # first make sure all param to false 
-            # self.set_parameter_requires_grad(slow, False)
-
-            # if self.fix_layer == 'all':
-            #     # train all param
-            #     self.set_parameter_requires_grad(slow, True)
-            # elif self.fix_layer == 'head':
-            #     # train model head, fix other
-            #     self.set_parameter_requires_grad(model_head, True)
-            # elif self.fix_layer == 'stem_head':
-            #     # train model head and stem, fix other
-            #     self.set_parameter_requires_grad(model_head, True)
-            #     self.set_parameter_requires_grad(model_stem, True)
-            # elif self.fix_layer == 'stage_head':
-            #     # train model stage and head, fix stem
-            #     self.set_parameter_requires_grad(model_stage, True)
-            #     self.set_parameter_requires_grad(model_head, True)
-
-        else:
-            slow = resnet.create_resnet(
-                input_channel=6,
-                model_depth=self.model_depth,
-                model_num_class=self.model_class_num,
-                norm=nn.BatchNorm3d,
-                activation=nn.ReLU,
-            )
-
-        return slow
-
-# ! below is compare experiment.
-# %%
-class single_frame(nn.Module):
+class single(nn.Module):
 
     def __init__(self, hparams) -> None:
 
@@ -230,63 +76,65 @@ class early_fusion(nn.Module):
 class late_fusion(nn.Module):
 
     def __init__(self, hparams) -> None:
+
         super().__init__()
 
-        self.model_class_num = hparams.model_class_num
+        self.model_class_num = hparams.model.model_class_num
 
-        self.transfor_learning = hparams.transfor_learning
+        # self.transfor_learning = hparams.transfor_learning
 
-        self.resnet_model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet50', pretrained=self.transfor_learning)
+        model_ap = torch.hub.load('facebookresearch/pytorchvideo', 'slow_r50', pretrained=True)
+        model_lat = torch.hub.load('facebookresearch/pytorchvideo', 'slow_r50', pretrained=True)
 
         # late fusion model
-        self.first_model = torch.nn.Sequential(*list(self.resnet_model.children())[:-2])
-        self.last_model = copy.deepcopy(self.first_model)
+        self.first_model = model_ap.blocks[:-1]
+        self.second_model = model_lat.blocks[:-1]
 
-        self.last_pool = torch.nn.AdaptiveAvgPool2d(output_size=(1, 1))
-        self.last_layer = torch.nn.Linear(4096, self.model_class_num, bias=True)
+        self.head = model_ap.blocks[-1]
+        self.head.proj = nn.Linear(2048 * 2, self.model_class_num)
 
-    def forward(self, img: torch.Tensor) -> torch.Tensor:
+    def forward(self, video_ap: torch.Tensor, video_lat: torch.Tensor) -> torch.Tensor:
 
-        b, c, t, h, w = img.size()
-        batch_imgs = img.permute(0, 2, 1, 3, 4) # b, t, c, h, w
+        # transporse the video tensor
+        video_ap = video_ap.permute(0, 2, 1, 3, 4) # b, t, c, h, w > b, c, t, h, w
+        video_lat = video_lat.permute(0, 2, 1, 3, 4) # b, t, c, h, w > b, c, t, h, w
 
-        first_single_frame =  batch_imgs[:, 10, :] # b, c, h, w
-        last_single_frame = batch_imgs[:, -10, :] # b, c, h, w
+        for layer in self.first_model:
+            video_ap = layer(video_ap)
 
-        first_feat = self.first_model(first_single_frame)
-        last_feat = self.last_model(last_single_frame)
+        for layer in self.second_model:
+            video_lat = layer(video_lat)    
 
-        cat_feat = torch.cat((first_feat, last_feat), dim = 1) # b, c
+        cat_feat = torch.cat((video_ap, video_lat), dim = 1) # b, c
 
-        output = self.last_layer(self.last_pool(cat_feat).squeeze())
+        # output = self.head(cat_feat)
 
-        return output
+        # head 
+        cat_feat = self.head(cat_feat)
 
+        return cat_feat
 
-# # %%
-# class opt: 
+class slow_fast(nn.Module):
 
-#     model_class_num = 1
-#     model_depth = 50
-#     transfor_learning = True
-#     fix_layer = 'stage_head'
+    def __init__(self, hparams) -> None:
 
-# make_video_module = MakeVideoModule(opt)
+        super().__init__()
 
-# model = make_video_module.make_walk_i3d()
+        self.model_class_num = hparams.model_class
 
-# from torchinfo import summary
+        self.model_ap = torch.hub.load('facebookresearch/pytorchvideo', 'slow_r50', pretrained=True)
+        self.model_lat = torch.hub.load('facebookresearch/pytorchvideo', 'slow_r50', pretrained=True)
 
-# summary(model, input_size=(4, 3, 16, 224, 224))
-# # %%
+        self.model_ap.blocks[-1].proj = nn.Linear(2048, self.model_class_num)
+        self.model_lat.blocks[-1].proj = nn.Linear(2048, self.model_class_num)
+    
+    def forward(self, video_ap: torch.Tensor, video_lat: torch.Tensor) -> torch.Tensor:
+        
+        # transporse the
+        video_ap = video_ap.permute(0, 2, 1, 3, 4)
+        video_lat = video_lat.permute(0, 2, 1, 3, 4)
 
-# single_frame_model = single_frame(opt)
+        output_ap = self.model_ap(video_ap)
+        output_lat = self.model_lat(video_lat)
 
-# batch_video = torch.randn(size=[4, 3, 16, 224, 224])
-
-# output = single_frame_model(batch_video)
-
-# %%
-# list the model in repo.
-torch.hub.list('facebookresearch/pytorchvideo', force_reload=True)
-# # %%
+        return output_ap, output_lat

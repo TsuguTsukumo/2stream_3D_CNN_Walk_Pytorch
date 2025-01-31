@@ -3,13 +3,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np 
 
-from models.make_model import MakeVideoModule, early_fusion, late_fusion, single_frame
+from project.models.make_model import early_fusion
 
 from pytorch_lightning import LightningModule
 
-from utils.metrics import *
-
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from torchmetrics.classification import (
+    MulticlassAccuracy,
+    MulticlassPrecision,
+    MulticlassRecall,
+    MulticlassF1Score,
+    MulticlassConfusionMatrix
+)
 
 import matplotlib.pyplot as plt 
 import seaborn as sns

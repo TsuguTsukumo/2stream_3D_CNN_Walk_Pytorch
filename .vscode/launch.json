@@ -8,11 +8,11 @@
             "name": "fusion_model",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
             "module": "project.main",
             "console": "integratedTerminal",
             "args": [
                 "train.experiment=late_fusion",
+                "data.batch_size=8"
             ]
         }
     ]

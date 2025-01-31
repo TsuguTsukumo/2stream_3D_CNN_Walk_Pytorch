@@ -23,6 +23,11 @@ data:
 
   num_workers: 7
   img_size: 224
+  batch_size: 8
+
+  # used for val
+  clip_duration: 1 # clip duration for the video
+  uniform_temporal_subsample_num: 8 # num frame from the clip duration, f or define one gait cycle, we need use whole frames.
 
 model:
   backbone: resnet # choices=[3dcnn], help='the backbone of the model'
@@ -30,17 +35,12 @@ model:
   model_depth: 50 # choices=[50, 101, 152], help='the depth of used model'
 
 train:
-
   # Training config
   max_epochs: 50 # numer of epochs of training
 
-  # used for val
-  clip_duration: 1 # clip duration for the video
-  uniform_temporal_subsample_num: 8 # num frame from the clip duration, f or define one gait cycle, we need use whole frames.
-
   gpu_num: 0 # choices=[0, 1], help='the gpu number whicht to train'
 
-  experiment: late_fusion # choices=[single, early_fusion, late_fusion], help='the different feature fusion method'
+  experiment: late_fusion # choices=[single, early_fusion, late_fusion, slow_fusion], help='the different feature fusion method'
   log_path: logs/${model.backbone}/${train.experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}
 
   fast_dev_run: False # if use the fast_dev_run

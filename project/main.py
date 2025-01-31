@@ -48,8 +48,9 @@ import hydra
 from omegaconf import DictConfig
 
 
-def train(hparams: DictConfig, fold: str):
+def train(hparams: DictConfig):
 
+    fold = hparams.train.current_fold
     # set seed
     seed_everything(42, workers=True)
 
@@ -88,9 +89,9 @@ def train(hparams: DictConfig, fold: str):
 
     # define the checkpoint becavier.
     model_check_point = ModelCheckpoint(
-        filename="{epoch}-{val/loss:.2f}-{val/video_acc:.4f}",
+        filename="{epoch}-{val/loss:.2f}-{val/acc:.4f}",
         auto_insert_metric_name=False,
-        monitor="val/video_acc",
+        monitor="val/acc",
         mode="max",
         save_last=False,
         save_top_k=2,
@@ -98,17 +99,17 @@ def train(hparams: DictConfig, fold: str):
 
     # define the early stop.
     early_stopping = EarlyStopping(
-        monitor="val/video_acc",
+        monitor="val/acc",
         patience=3,
         mode="max",
     )
 
     pl_trainer = Trainer(
         devices=[
-            hparams.gpu_num,
+            hparams.train.gpu_num,
         ],
         accelerator="gpu",
-        max_epochs=hparams.max_epochs,
+        max_epochs=hparams.train.max_epochs,
         logger=tb_logger,
         #   log_every_n_steps=100,
         check_val_every_n_epoch=1,
@@ -134,8 +135,8 @@ def init_params(config):
     # K Fold CV
     #############
 
-    DATA_PATH_A = config.ap_data_path
-    DATA_PATH_B = config.lat_data_path
+    DATA_PATH_A = config.data.ap_data_path
+    DATA_PATH_B = config.data.lat_data_path
 
     # get the fold number
     print("DATA_PATH_A:", DATA_PATH_A)
@@ -159,7 +160,7 @@ def init_params(config):
         print("Strat %s" % fold)
         print("#" * 50)
 
-        config.fold = fold
+        config.train.current_fold = fold
 
         train(config)
 

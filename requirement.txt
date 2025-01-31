@@ -12,3 +12,5 @@ hydra-core
 scikit-learns
 
 pytorchvideo
+torchmetrics
+tensorboard

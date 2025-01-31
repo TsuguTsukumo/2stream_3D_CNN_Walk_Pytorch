@@ -25,17 +25,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.make_model import MakeVideoModule, early_fusion, late_fusion, single_frame
+from project.models.make_model import late_fusion
 
 from pytorch_lightning import LightningModule
 
-from utils.metrics import *
+from torchmetrics.classification import (
+    MulticlassAccuracy,
+    MulticlassPrecision,
+    MulticlassRecall,
+    MulticlassF1Score,
+    MulticlassConfusionMatrix
+)
 
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from torchmetrics.classification import (
+    BinaryAccuracy,
+    BinaryPrecision,
+    BinaryRecall,
+    BinaryF1Score,
+    BinaryConfusionMatrix,
+)
 
-import matplotlib.pyplot as plt 
-import seaborn as sns
-import torchmetrics
+
+from project.utils.helper import save_inference, save_metrics, save_CM
 
 class LateFusionTrainer(LightningModule):
     
@@ -44,39 +55,31 @@ class LateFusionTrainer(LightningModule):
 
         # return model type name
         self.model_type=hparams.model
-        self.img_size = hparams.img_size
+        self.img_size = hparams.data.img_size
 
-        self.lr=hparams.lr
-        self.num_class = hparams.model_class_num
-        self.uniform_temporal_subsample_num = hparams.uniform_temporal_subsample_num
+        self.lr=hparams.optimizer.lr
+        self.num_classes = hparams.model.model_class_num
+        self.uniform_temporal_subsample_num = hparams.data.uniform_temporal_subsample_num
 
-        self.fusion_method = hparams.fusion_method       
-
-        if self.fusion_method == 'slow_fusion':
-            self.model = MakeVideoModule(hparams)
-
-            # select the network structure 
-            if self.model_type == 'resnet':
-                self.model=self.model.make_walk_resnet()
-
-        elif self.fusion_method == 'early_fusion':
-            self.model = early_fusion(hparams)
-        elif self.fusion_method == 'late_fusion':
-            self.model = late_fusion(hparams)
-        else:
-            raise ValueError('no choiced model selected, get {self.fusion_method}')
-
-        self.transfor_learning = hparams.transfor_learning
+        self.model = late_fusion(hparams)
 
         # save the hyperparameters to the file and ckpt
         self.save_hyperparameters()
 
         # select the metrics
-        self._accuracy = get_Accuracy(self.num_class)
-        self._precision = get_Precision(self.num_class)
-        self._confusion_matrix = get_Confusion_Matrix()
-        self.f1_score = torchmetrics.F1Score(task="binary", num_classes=self.num_class)
-        
+        # self._accuracy = MulticlassAccuracy(num_classes=self.num_classes)
+        # self._precision = MulticlassPrecision(num_classes=self.num_classes)
+        # self._recall = MulticlassRecall(num_classes=self.num_classes)
+        # self._f1_score = MulticlassF1Score(num_classes=self.num_classes)
+        # self._confusion_matrix = MulticlassConfusionMatrix(num_classes=self.num_classes)
+
+        self._accuracy = BinaryAccuracy()
+        self._precision = BinaryPrecision()
+        self._recall = BinaryRecall()
+        self._f1_score = BinaryF1Score()
+        self._confusion_matrix = BinaryConfusionMatrix()
+
+
     def forward(self, x):
         return self.model(x)
 
@@ -92,60 +95,35 @@ class LateFusionTrainer(LightningModule):
             loss: the calc loss
         '''
         
-        # input and label
+        # * Check the info from two date 
         self._check_info(batch=batch)
-        label = batch['a']['label']
-        
+
+        label = batch['ap']['label']
+
         # input and label
-        video_a = batch['a']['video'] # b, c, t, h, w
-        video_b = batch['b']['video'] # b, c, t, h, w
+        video_a = batch['ap']['video'] # b, t, c, h, w
+        video_b = batch['lat']['video'] # b, t, c, h, w
         
-        fusion_video = torch.cat([video_a, video_b], dim=2) # b, t, c, h, w 
-        fusion_video = fusion_video.transpose(2, 1) # b, t, c, h, w > b, c, t, h, w 
-
-        if self.fusion_method == 'single_frame': 
-            # for single frame
-            label = batch['label'].detach()
-
-            # when batch > 1, for multi label, to repeat label in (bxt)
-            label = label.repeat_interleave(self.uniform_temporal_subsample_num).squeeze()
-
-        else:
-            label = batch['a']['label'] # b, class_num
-
-        # classification task
-        y_hat = self.model(fusion_video)
-
+        # * predict the video frames
+        preds = self.model(video_a, video_b)
+        
         # when torch.size([1]), not squeeze.
-        if y_hat.size()[0] != 1 or len(y_hat.size()) != 1 :
-            y_hat = y_hat.squeeze(dim=-1)
-            
-            y_hat_sigmoid = torch.sigmoid(y_hat)
-        
-        else:
-            y_hat_sigmoid = torch.sigmoid(y_hat)
+        preds = preds.squeeze(dim=-1)
+        preds_sigmoid = torch.sigmoid(preds)
 
-        loss = F.binary_cross_entropy_with_logits(y_hat, label.float())
-        # soft_margin_loss = F.soft_margin_loss(y_hat_sigmoid, label.float())
+        # squeeze(dim=-1) to keep the torch.Size([1]), not null.
+        train_loss = F.binary_cross_entropy_with_logits(preds, label.float())
 
-        accuracy = self._accuracy(y_hat_sigmoid, label)
-        precision = self._precision(y_hat_sigmoid, label)
+        # calc the metric, function from torchmetrics
+        accuracy = self._accuracy(preds_sigmoid, label)
+        precision = self._precision(preds_sigmoid, label)
+        val_f1 = self._f1_score(preds_sigmoid, label)
 
-        self.log_dict({'train_loss': loss, 'train_acc': accuracy, 'train_precision': precision}, on_step=True, on_epoch=True)
+        confusion_matrix = self._confusion_matrix(preds_sigmoid, label)
 
-        return loss
+        self.log_dict({'train/f1:': val_f1, 'train/loss': train_loss, 'train/acc': accuracy, 'train/precision': precision}, on_step=True, on_epoch=True)
 
-    # def training_epoch_end(self, outputs) -> None:
-    #     '''
-    #     after validattion_step end.
-
-    #     Args:
-    #         outputs (list): a list of the train_step return value.
-    #     '''
-        
-    #     # log epoch metric
-    #     # self.log('train_acc_epoch', self.accuracy)
-    #     pass
+        return train_loss
 
     def validation_step(self, batch, batch_idx):
         '''
@@ -162,137 +140,150 @@ class LateFusionTrainer(LightningModule):
 
         # * Check the info from two date 
         self._check_info(batch=batch)
-        label = batch['a']['label']
+
+        label = batch['ap']['label']
 
         # input and label
-        video_a = batch['a']['video'] # b, t, c, h, w
-        video_b = batch['b']['video'] # b, t, c, h, w
-
-        # TODO: fuse the video data with lat and ap.
-        fusion_video = torch.cat([video_a, video_b], dim=2) # b, t, c, h, w 
-        fusion_video = fusion_video.transpose(2, 1) # b, t, c, h, w > b, c, t, h, w 
-        self.model.eval()
+        video_a = batch['ap']['video'] # b, t, c, h, w
+        video_b = batch['lat']['video'] # b, t, c, h, w
         
-        # pred the video frames
+        # * predict the video frames
         with torch.no_grad():
-            preds = self.model(fusion_video)
-
+            preds = self.model(video_a, video_b)
+        
         # when torch.size([1]), not squeeze.
-        if preds.size()[0] != 1 or len(preds.size()) != 1 :
-            preds = preds.squeeze(dim=-1)
-            preds_sigmoid = torch.sigmoid(preds)
-        else:
-            preds_sigmoid = torch.sigmoid(preds)
+        preds = preds.squeeze(dim=-1)
+        preds_sigmoid = torch.sigmoid(preds)
 
         # squeeze(dim=-1) to keep the torch.Size([1]), not null.
         val_loss = F.binary_cross_entropy_with_logits(preds, label.float())
 
         # calc the metric, function from torchmetrics
         accuracy = self._accuracy(preds_sigmoid, label)
-
         precision = self._precision(preds_sigmoid, label)
+        val_f1 = self._f1_score(preds_sigmoid, label)
 
         confusion_matrix = self._confusion_matrix(preds_sigmoid, label)
 
-        val_f1 = self.f1_score(preds_sigmoid, label)
         # log the val loss and val acc, in step and in epoch.
-        self.log_dict({'val_f1:': val_f1, 'val_loss': val_loss, 'val_acc': accuracy, 'val_precision': precision}, on_step=True, on_epoch=True)
+        self.log_dict({'val/f1:': val_f1, 'val/loss': val_loss, 'val/acc': accuracy, 'val/precision': precision}, on_step=True, on_epoch=True)
         
-        return accuracy
+    ##############
+    # test step
+    ##############
+    # the order of the hook function is:
+    # on_test_start -> test_step -> on_test_batch_end -> on_test_epoch_end -> on_test_end
 
-    def validation_epoch_end(self, outputs):
-        pass
+    def on_test_start(self) -> None:
+        """hook function for test start"""
+        self.test_outputs = []
+        self.test_pred_list = []
+        self.test_label_list = []
+
+        logging.info("test start")
+
+    def on_test_end(self) -> None:
+        """hook function for test end"""
+        logging.info("test end")
+
+    def test_step(self, batch: torch.Tensor, batch_idx: int):
+
+        # * Check the info from two date 
+        self._check_info(batch=batch)
+
+        label = batch['ap']['label']
+
+        # input and label
+        video_a = batch['ap']['video'] # b, t, c, h, w
+        video_b = batch['lat']['video'] # b, t, c, h, w
         
-        # val_metric = torch.stack(outputs, dim=0)
+        # * predict the video frames
+        with torch.no_grad():
+            preds = self.model(video_a, video_b)
+        
+        # when torch.size([1]), not squeeze.
+        preds = preds.squeeze(dim=-1)
+        preds_sigmoid = torch.sigmoid(preds)
 
-        # final_acc = (torch.sum(val_metric) / len(val_metric)).item()
+        # squeeze(dim=-1) to keep the torch.Size([1]), not null.
+        test_loss = F.binary_cross_entropy_with_logits(preds, label.float())
 
-        # print('Epoch: %s, avgAcc: %s' % (self.current_epoch, final_acc))
+        # calc the metric, function from torchmetrics
+        accuracy = self._accuracy(preds_sigmoid, label)
+        precision = self._precision(preds_sigmoid, label)
+        fi_score = self._f1_score(preds_sigmoid, label)
 
-        # self.ACC[self.current_epoch] = final_acc
+        confusion_matrix = self._confusion_matrix(preds_sigmoid, label)
 
-    def on_validation_end(self) -> None:
-        pass
-            
-    def test_step(self, batch, batch_idx):
-        '''
-        test step when trainer.test called
+        self.log_dict(
+            {
+                "test/acc": accuracy,
+                "test/precision": precision,
+                "test/f1_score": fi_score,
+            },
+            on_epoch=True, on_step=True, batch_size=label.size(0)
+        )
+
+        return preds_sigmoid
+
+    def on_test_batch_end(
+        self,
+        outputs: list[torch.Tensor],
+        batch,
+        batch_idx: int,
+        dataloader_idx: int = 0,
+    ) -> None:
+        """hook function for test batch end
 
         Args:
-            batch (3D tensor): b, c, t, h, w
-            batch_idx (_type_): _description_
-        '''
+            outputs (torch.Tensor | logging.Mapping[str, Any] | None): current output from batch.
+            batch (Any): the data of current batch.
+            batch_idx (int): the index of current batch.
+            dataloader_idx (int, optional): the index of all dataloader. Defaults to 0.
+        """
 
-        # input and label
-        video = batch['video'].detach() # b, c, t, h, w
+        perds = outputs
+        label = batch['ap']['label'].float().squeeze()
 
-        if self.fusion_method == 'single_frame': 
-            label = batch['label'].detach()
+        self.test_outputs.append(outputs)
+        # tensor to list
+        for i in perds.tolist():
+            self.test_pred_list.append(i)
+        for i in label.tolist():
+            self.test_label_list.append(i)
 
-            # when batch > 1, for multi label, to repeat label in (bxt)
-            label = label.repeat_interleave(self.uniform_temporal_subsample_num).squeeze()
+    def on_test_epoch_end(self) -> None:
+        """hook function for test epoch end"""
 
-        else:
-            label = batch['label'].detach() # b, class_num
+        # save inference
+        save_inference(
+            self.test_pred_list,
+            self.test_label_list,
+            fold=self.logger.name,
+            save_path=self.hparams.hparams.train.log_path,
+        )
+        # save metrics
+        save_metrics(
+            self.test_pred_list,
+            self.test_label_list,
+            fold=self.logger.name,
+            save_path=self.hparams.hparams.train.log_path,
+            num_class=self.num_classes,
+        )
+        # save confusion matrix
+        save_CM(
+            self.test_pred_list,
+            self.test_label_list,
+            save_path=self.hparams.hparams.train.log_path,
+            num_class=self.num_classes,
+            fold=self.logger.name,
+        )
 
-        self.model.eval()
+        # save CAM
+        # save_CAM(self.test_pred_list, self.test_label_list, self.num_classes)
 
-        # pred the video frames
-        with torch.no_grad():
-            preds = self.model(video)
+        logging.info("test epoch end")
 
-        # when torch.size([1]), not squeeze.
-        if preds.size()[0] != 1 or len(preds.size()) != 1 :
-            preds = preds.squeeze(dim=-1)
-            preds_sigmoid = torch.sigmoid(preds)
-        else:
-            preds_sigmoid = torch.sigmoid(preds)
-
-        # squeeze(dim=-1) to keep the torch.Size([1]), not null.
-        val_loss = F.binary_cross_entropy_with_logits(preds, label.float())
-
-        # calc the metric, function from torchmetrics
-        accuracy = self._accuracy(preds_sigmoid, label)
-
-        precision = self._precision(preds_sigmoid, label)
-
-        confusion_matrix = self._confusion_matrix(preds_sigmoid, label)
-
-        # log the val loss and val acc, in step and in epoch.
-        self.log_dict({'test_loss': val_loss, 'test_acc': accuracy, 'test_precision': precision}, on_step=False, on_epoch=True)
-
-        return {
-            'pred': preds_sigmoid.tolist(),
-            'label': label.tolist()
-        }
-        
-    def test_epoch_end(self, outputs):
-        #todo try to store the pred or confusion matrix
-        pred_list = []
-        label_list = []
-
-        for i in outputs:
-            for number in i['pred']:
-                if number > 0.5:
-                    pred_list.append(1)
-                else:
-                    pred_list.append(0)
-            for number in i['label']:
-                label_list.append(number)
-
-        pred = torch.tensor(pred_list)
-        label = torch.tensor(label_list)
-
-        cm = confusion_matrix(label, pred)
-        ax = sns.heatmap(cm, annot=True, fmt="3d")
-
-        ax.set_title('confusion matrix')
-        ax.set(xlabel="pred class", ylabel="ground truth")
-        ax.xaxis.tick_top()
-        plt.show()
-        plt.savefig('test.png')
-
-        return cm 
 
     def configure_optimizers(self):
         '''
@@ -309,14 +300,10 @@ class LateFusionTrainer(LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer),
-                "monitor": "val_loss",
+                "monitor": "val/loss",
             },
         }
-        # return torch.optim.SGD(self.parameters(), lr=self.lr)
 
-    def _get_name(self):
-        return self.model_type
-    
     def _check_info(self, batch: dict) -> None:
         """check the info from data loader.
         because prepare the two data, lat and ap, so should check the video name, tensor shape and label, first
@@ -326,8 +313,8 @@ class LateFusionTrainer(LightningModule):
         """        
 
         # * Check the info from two date 
-        video_info_a = batch['a']
-        video_info_b = batch['b']
+        video_info_a = batch['ap']
+        video_info_b = batch['lat']
         
         # print('vedeoname_a', video_info_a["video_name"])
         # print('vedeoname_b', video_info_b["video_name"])
