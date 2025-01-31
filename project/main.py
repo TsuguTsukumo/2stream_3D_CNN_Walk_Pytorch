@@ -151,9 +151,6 @@ def init_params(config):
     print("fold_num_a:", fold_num_a)
     print("fold_num_b:", fold_num_b)
 
-    store_Acc_Dict = {}
-    sum_list = []
-
     for fold in fold_num_a:
         #################
         # start k Fold CV
@@ -168,10 +165,6 @@ def init_params(config):
         train(config)
 
     print("#" * 50)
-    print("different fold Acc:")
-    print(store_Acc_Dict)
-    print("Final avg Acc is: %s" % (sum(sum_list) / len(sum_list)))
-
 
 if __name__ == "__main__":
 
