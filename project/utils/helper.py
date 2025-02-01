@@ -10,7 +10,7 @@ Comment:
 
 Have a good code time :)
 -----
-Last Modified: Friday January 31st 2025 11:46:07 am
+Last Modified: Saturday February 1st 2025 8:45:45 am
 Modified By: the developer formerly known as Kaixu Chen at <chenkaixusan@gmail.com>
 -----
 Copyright (c) 2025 The University of Tsukuba
@@ -134,7 +134,7 @@ def save_CM(all_pred: list, all_label: list, save_path: str, num_class: int, fol
     # set the font and title
     plt.rcParams.update({"font.size": 30, "font.family": "sans-serif"})
 
-    confusion_matrix_data = _confusion_matrix(all_pred, all_label).cpu().numpy() * 100
+    confusion_matrix_data = _confusion_matrix(all_pred, all_label).cpu().numpy() / 10
 
     axis_labels = ["ASD", "non-ASD",]
 
@@ -149,12 +149,12 @@ def save_CM(all_pred: list, all_label: list, save_path: str, num_class: int, fol
         vmin=0,
         vmax=100,
     )
-    plt.title(f"Fold {fold} (%)", fontsize=30)
+    plt.title(f"{fold} (%)", fontsize=30)
     plt.ylabel("Actual Label", fontsize=30)
     plt.xlabel("Predicted Label", fontsize=30)
 
     plt.savefig(
-        save_path / f"fold{fold}_confusion_matrix.png", dpi=300, bbox_inches="tight"
+        save_path / f"{fold}_confusion_matrix.png", dpi=300, bbox_inches="tight"
     )
 
     logging.info(
