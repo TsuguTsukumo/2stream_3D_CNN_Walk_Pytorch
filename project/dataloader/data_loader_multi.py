@@ -29,6 +29,7 @@ from torchvision.transforms import (
 )
 
 from torchvision.transforms.v2 import functional as F, Transform
+
 # from pytorchvideo.transforms import (
 #     ApplyTransformToKey,
 #     Normalize,
@@ -56,6 +57,7 @@ from pytorchvideo.data.labeled_video_dataset import (
     labeled_video_dataset,
 )
 
+
 class UniformTemporalSubsample(Transform):
     """Uniformly subsample ``num_samples`` indices from the temporal dimension of the video.
 
@@ -75,7 +77,7 @@ class UniformTemporalSubsample(Transform):
         self.num_samples = num_samples
 
     def _transform(self, inpt: Any, params: Dict[str, Any]) -> Any:
-        inpt = inpt.permute(1, 0, 2, 3) # [C, T, H, W] -> [T, C, H, W]
+        inpt = inpt.permute(1, 0, 2, 3)  # [C, T, H, W] -> [T, C, H, W]
         return self._call_kernel(F.uniform_temporal_subsample, inpt, self.num_samples)
 
 
@@ -193,18 +195,11 @@ class MultiData(LightningDataModule):
                     key="video",
                     transform=Compose(
                         [
-                            # uniform clip T frames from the given n sec video.
                             UniformTemporalSubsample(
                                 self.uniform_temporal_subsample_num
                             ),
-                            # dived the pixel from [0, 255] tp [0, 1], to save computing resources.
                             Div255(),
                             Resize(size=[self._IMG_SIZE, self._IMG_SIZE]),
-                            # Normalize((0.45, 0.45, 0.45), (0.225, 0.225, 0.225)),
-                            # RandomShortSideScale(min_size=256, max_size=320),
-                            # RandomCrop(self._IMG_SIZE),
-                            # ShortSideScale(self._IMG_SIZE),
-                            # RandomHorizontalFlip(p=0.5),
                         ]
                     ),
                 ),
@@ -225,9 +220,13 @@ class MultiData(LightningDataModule):
         # if stage == "fit" or stage == None:
         if stage in ("fit", None):
             self.train_dataset_1, self.train_dataset_2 = WalkDataset(
-                data_path_ap=os.path.join(self._TRAIN_PATH_1, self.current_fold, "train"),
-                data_path_lat=os.path.join(self._TRAIN_PATH_2, self.current_fold, "train"),
-                clip_sampler=make_clip_sampler("random", self._CLIP_DURATION),
+                data_path_ap=os.path.join(
+                    self._TRAIN_PATH_1, self.current_fold, "train"
+                ),
+                data_path_lat=os.path.join(
+                    self._TRAIN_PATH_2, self.current_fold, "train"
+                ),
+                clip_sampler=make_clip_sampler("uniform", self._CLIP_DURATION),
                 video_sampler=torch.utils.data.SequentialSampler,
                 transform=self.train_transform,
             )
@@ -235,7 +234,9 @@ class MultiData(LightningDataModule):
         if stage in ("fit", "validate", None):
             self.val_dataset_1, self.val_dataset_2 = WalkDataset(
                 data_path_ap=os.path.join(self._TRAIN_PATH_1, self.current_fold, "val"),
-                data_path_lat=os.path.join(self._TRAIN_PATH_2, self.current_fold, "val"),
+                data_path_lat=os.path.join(
+                    self._TRAIN_PATH_2, self.current_fold, "val"
+                ),
                 clip_sampler=make_clip_sampler("uniform", self._CLIP_DURATION),
                 video_sampler=torch.utils.data.SequentialSampler,
                 transform=self.train_transform,
@@ -244,7 +245,9 @@ class MultiData(LightningDataModule):
         if stage in ("predict", "test", None):
             self.test_dataset_1, self.test_dataset_2 = WalkDataset(
                 data_path_ap=os.path.join(self._TRAIN_PATH_1, self.current_fold, "val"),
-                data_path_lat=os.path.join(self._TRAIN_PATH_2, self.current_fold, "val"),
+                data_path_lat=os.path.join(
+                    self._TRAIN_PATH_2, self.current_fold, "val"
+                ),
                 clip_sampler=make_clip_sampler("uniform", self._CLIP_DURATION),
                 video_sampler=torch.utils.data.SequentialSampler,
                 transform=self.train_transform,
@@ -262,7 +265,6 @@ class MultiData(LightningDataModule):
                 batch_size=self._BATCH_SIZE,
                 num_workers=self._NUM_WORKERS,
             ),
-
         }
         return CombinedLoader(
             combined_loader,
@@ -287,9 +289,9 @@ class MultiData(LightningDataModule):
             combined_loader,
             mode="max_size_cycle",
         )
-    
+
     def test_dataloader(self) -> DataLoader:
-        
+
         combined_loader = {
             "ap": DataLoader(
                 self.test_dataset_1,

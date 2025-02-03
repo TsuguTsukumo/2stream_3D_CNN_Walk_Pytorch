@@ -36,13 +36,9 @@ model:
 
 device:
   device: auto # choices=[auto, 1, 2], help='how many gpu to use'
-  gpu_num: 0
 
 train:
-  # Training config
   max_epochs: 50 # numer of epochs of training
-
-  gpu_num: 0 # choices=[0, 1], help='the gpu number whicht to train'
 
   experiment: late_fusion # choices=[single, early_fusion, late_fusion, slow_fusion], help='the different feature fusion method'
   log_path: logs/${model.backbone}/${train.experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}

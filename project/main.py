@@ -23,16 +23,12 @@ Date      	By	Comments
 import os
 import logging
 
-import pytorch_lightning
 from pytorch_lightning import Trainer, seed_everything
 
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import (
-    TQDMProgressBar,
-    RichModelSummary,
     ModelCheckpoint,
     EarlyStopping,
-    LearningRateMonitor,
 )
 
 # dataloader
@@ -50,8 +46,8 @@ from omegaconf import DictConfig
 
 
 def train(hparams: DictConfig):
-
     fold = hparams.train.current_fold
+
     # set seed
     seed_everything(42, workers=True)
 
@@ -120,7 +116,7 @@ def train(hparams: DictConfig):
             model_check_point,
             early_stopping,
         ],
-        #   deterministic=True
+        fast_dev_run=hparams.train.fast_dev_run, # for debug
     )
 
     pl_trainer.fit(trainer, data_module)
@@ -138,20 +134,7 @@ def init_params(config):
     # K Fold CV
     #############
 
-    DATA_PATH_A = config.data.ap_data_path
-    DATA_PATH_B = config.data.lat_data_path
-
-    # get the fold number
-    print("DATA_PATH_A:", DATA_PATH_A)
-    fold_num_a = os.listdir(DATA_PATH_A)
-    print("DATA_PATH_B:", DATA_PATH_B)
-    fold_num_b = os.listdir(DATA_PATH_B)
-    fold_num_a.sort()
-    fold_num_b.sort()
-    print("fold_num_a:", fold_num_a)
-    print("fold_num_b:", fold_num_b)
-
-    for fold in fold_num_a:
+    for fold in config.train.fold:
         #################
         # start k Fold CV
         #################
@@ -166,7 +149,7 @@ def init_params(config):
 
     print("#" * 50)
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     os.environ["HYDRA_FULL_ERROR"] = "1"
     init_params()
