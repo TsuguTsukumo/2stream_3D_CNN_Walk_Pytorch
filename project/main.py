@@ -134,7 +134,7 @@ def init_params(config):
     # K Fold CV
     #############
 
-    for fold in config.train.fold:
+    for fold in range(config.train.fold):
         #################
         # start k Fold CV
         #################
@@ -143,7 +143,7 @@ def init_params(config):
         print("Strat %s" % fold)
         print("#" * 50)
 
-        config.train.current_fold = fold
+        config.train.current_fold = f"fold{fold}"
 
         train(config)
 

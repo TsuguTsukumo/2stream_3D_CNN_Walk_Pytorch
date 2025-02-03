@@ -10,7 +10,7 @@ Comment:
 
 Have a good code time :)
 -----
-Last Modified: Friday January 31st 2025 11:46:07 am
+Last Modified: Friday January 31st 2025 2:03:59 pm
 Modified By: the developer formerly known as Kaixu Chen at <chenkaixusan@gmail.com>
 -----
 Copyright (c) 2025 The University of Tsukuba
@@ -30,10 +30,7 @@ class single(nn.Module):
         super().__init__()
 
         self.model_class_num = hparams.model_class_num
-
-        self.transfor_learning = hparams.transfor_learning
-
-        self.resnet_model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet50', pretrained=self.transfor_learning)
+        self.resnet_model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet50', pretrained=True)
 
         self.resnet_model.fc = torch.nn.Linear(2048, self.model_class_num, bias=True)
 
