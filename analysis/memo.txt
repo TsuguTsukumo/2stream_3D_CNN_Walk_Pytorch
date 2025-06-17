@@ -1,0 +1,284 @@
+import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
+import cv2
+import numpy as np
+import yaml
+import os
+from PIL import Image
+import matplotlib.pyplot as plt
+import sys
+
+# --- 1. モデル定義をインポートするためのパス設定 ---
+# 現在のノートブックのディレクトリを取得
+notebook_dir = os.getcwd() 
+
+# プロジェクトのルートディレクトリ (project/project の親) を計算
+project_root = os.path.abspath(os.path.join(notebook_dir, '..', 'project')) 
+
+# project/models ディレクトリを sys.path に追加
+models_dir = os.path.join(project_root, 'models')
+
+if models_dir not in sys.path:
+    sys.path.append(models_dir)
+    print(f"'{models_dir}' を sys.path に追加しました。")
+
+# --- モデル定義をインポート ---
+try:
+    from make_model import single, early_fusion, late_fusion, slow_fusion
+    print("モデルが make_model.py から正常にインポートされました。")
+except ImportError as e:
+    print(f"エラー: モデルのインポートに失敗しました。make_model.py が存在し、パスが通っているか確認してください: {e}")
+    print(f"現在、sys.path は次の通りです: {sys.path}")
+    print("解決策: 上記のパス設定があなたのディレクトリ構造と一致しているか確認してください。")
+    exit()
+
+# --- 2. 設定ファイルの読み込み ---
+
+# config.yaml のパスを決定
+# Jupyter Notebookが 'project/analysis' にあり、config.yamlが 'project/' 直下にあると仮定
+config_path = os.path.join(project_root, 'config.yaml')
+
+def load_config(config_path):
+    """YAMLファイルを読み込み、辞書として返す関数"""
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        print(f"設定ファイル '{config_path}' を正常に読み込みました。")
+        return config
+    except FileNotFoundError:
+        print(f"エラー: 設定ファイル '{config_path}' が見つかりません。パスを確認してください。")
+        exit()
+    except yaml.YAMLError as e:
+        print(f"エラー: 設定ファイルの読み込み中に YAML エラーが発生しました: {e}")
+        exit()
+
+config_data = load_config(config_path)
+
+# hparams オブジェクトをシミュレート
+class HParams:
+    def __init__(self, data_config, model_config):
+        self.data = type('DataConfig', (object,), data_config)()
+        self.model = type('ModelConfig', (object,), model_config)()
+
+# config_data から hparams オブジェクトを作成
+hparams = HParams(config_data['data'], config_data['model'])
+
+
+# テスト動画と学習済みモデルの実際のパスを設定
+# ご自身の環境に合わせて、これらのパスを必ず更新してください！
+# 例: /workspace/data/test_front_view_video.mp4
+test_video_path_front = 'path/to/your/test_front_view_video.mp4' 
+# 例: /workspace/data/test_side_view_video.mp4
+test_video_path_side = 'path/to/your/test_side_view_video.mp4'   
+# 例: logs/resnet/late_fusion/2025-05-30/10-00-00/epoch=49-step=XXXX.ckpt
+model_path = 'path/to/your/trained_model.ckpt' 
+
+# 関連する設定値を取得
+image_size = config_data['data']['img_size']
+uniform_temporal_subsample_num = config_data['data']['uniform_temporal_subsample_num']
+num_classes = config_data['model']['model_class_num'] 
+fusion_type = config_data['train']['experiment'] 
+device_ids = config_data['device']['device'] # デバイスIDを取得
+
+print(f"\nモデル入力画像サイズ: {image_size}x{image_size}")
+print(f"クリップあたりのサンプリングフレーム数: {uniform_temporal_subsample_num}")
+print(f"出力クラス数 (model_class_num): {num_classes}")
+print(f"推論に選択されたフュージョンタイプ (experiment): {fusion_type}")
+print(f"使用するGPU ID: {device_ids}")
+print(f"正面ビューテスト動画パス: {test_video_path_front}")
+print(f"側面ビューテスト動画パス: {test_video_path_side}")
+print(f"学習済みモデルパス: {model_path}")
+
+---
+
+### 3. モデルのインスタンス化と学習済み重みのロード
+
+```python
+# フュージョンタイプに基づいて適切なモデルをインスタンス化
+# CUDAが利用可能で、指定されたGPU IDが有効な場合、そのGPUを使用
+if torch.cuda.is_available() and device_ids and isinstance(device_ids, list) and len(device_ids) > 0:
+    device = torch.device(f"cuda:{device_ids[0]}") # 最初のGPU IDを使用
+    print(f"GPU {device_ids[0]} を使用します。")
+else:
+    device = torch.device("cpu")
+    print("GPUが利用できないか、指定されていないため、CPUを使用します。")
+
+if fusion_type == 'single':
+    model = single(hparams).to(device)
+    print("注意: 'single' フュージョンタイプが選択されました。このモデルは単一の動画入力を期待します。")
+    print("推論には正面ビューの動画 ('test_video_path_front') を使用します。")
+elif fusion_type == 'early_fusion':
+    model = early_fusion(hparams).to(device)
+elif fusion_type == 'late_fusion':
+    model = late_fusion(hparams).to(device)
+elif fusion_type == 'slow_fusion':
+    model = slow_fusion(hparams).to(device)
+else:
+    raise ValueError(f"不明なフュージョンタイプ: {fusion_type}。config の 'train.experiment' を確認してください。")
+
+# 学習済み重みのロード (CKPTファイル対応)
+try:
+    checkpoint = torch.load(model_path, map_location=device)
+    # PyTorch Lightning の CKPT ファイルは 'state_dict' キーの下にモデルの重みを持つことが多い
+    # あるいは、トップレベルに直接重みがある場合もある
+    if 'state_dict' in checkpoint:
+        # Lightning の場合、キー名に 'model.' のプレフィックスが付くことがあるので除去
+        state_dict = {k.replace('model.', ''): v for k, v in checkpoint['state_dict'].items()}
+        model.load_state_dict(state_dict)
+    else:
+        # 'state_dict' キーがない場合は、直接モデルの重みと仮定
+        model.load_state_dict(checkpoint)
+        
+    model.eval() # モデルを評価モードに設定
+    print(f"モデルが {model_path} から正常にロードされました。")
+except FileNotFoundError:
+    print(f"エラー: モデルファイルが {model_path} に見つかりません。パスとファイル名を確認してください。")
+    exit()
+except Exception as e:
+    print(f"モデルのステート辞書のロード中にエラーが発生しました: {e}")
+    print("これは、モデルアーキテクチャが保存されたステート辞書と完全に一致しない場合に発生する可能性があります。")
+    print("特に、CKPT ファイルの構造が異なる可能性があります。")
+    exit()
+# 前処理の変換
+transform = transforms.Compose([
+    transforms.Resize((image_size, image_size)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
+
+def process_video_and_subsample(video_path, transform, num_frames_to_subsample):
+    frames = []
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"エラー: 動画 {video_path} を開けませんでした。")
+        return None
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if total_frames == 0:
+        print(f"警告: 動画 {video_path} にはフレームがありません。")
+        return None
+
+    indices = np.linspace(0, total_frames - 1, num_frames_to_subsample, dtype=int)
+    
+    current_frame_idx = 0
+    sampled_frames_count = 0
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if current_frame_idx in indices:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_pil = Image.fromarray(frame)
+            frames.append(transform(frame_pil))
+            sampled_frames_count += 1
+            if sampled_frames_count == num_frames_to_subsample:
+                break
+
+        current_frame_idx += 1
+            
+    cap.release()
+    
+    if len(frames) < num_frames_to_subsample:
+        print(f"警告: 動画 {video_path} から {len(frames)} フレームのみがサンプリングされました。期待値は {num_frames_to_subsample} フレームです。ゼロでパディングします。")
+        if frames:
+            dummy_frame = torch.zeros_like(frames[0]) 
+        else:
+            dummy_frame = torch.zeros(3, image_size, image_size)
+            
+        while len(frames) < num_frames_to_subsample:
+            frames.append(dummy_frame)
+    elif len(frames) > num_frames_to_subsample:
+        print(f"警告: 動画 {video_path} から {num_frames_to_subsample} フレームよりも多くのフレームがサンプリングされました。切り捨てます。")
+        frames = frames[:num_frames_to_subsample]
+
+    return torch.stack(frames)
+
+print("\nテスト動画を処理中...")
+
+# single モデルの場合、正面ビューのみを処理します
+if fusion_type == 'single':
+    video_frames_to_process = process_video_and_subsample(test_video_path_front, transform, uniform_temporal_subsample_num)
+    if video_frames_to_process is None:
+        print("エラー: single モデル用の動画のロードまたは処理に失敗しました。終了します。")
+        exit()
+    print(f"処理された動画テンソル形状 (single モデル用): {video_frames_to_process.shape} (T, C, H, W)")
+    # モデル入力のためにバッチ次元を追加
+    input_video_for_single_model = video_frames_to_process.unsqueeze(0).to(device)
+    print(f"モデル入力動画形状 (single モデル用): {input_video_for_single_model.shape} (B, T, C, H, W)")
+else:
+    # fusion モデルの場合、両方のビューを処理します
+    video_frames_front_chw = process_video_and_subsample(test_video_path_front, transform, uniform_temporal_subsample_num)
+    video_frames_side_chw = process_video_and_subsample(test_video_path_side, transform, uniform_temporal_subsample_num)
+
+    if video_frames_front_chw is None or video_frames_side_chw is None:
+        print("エラー: 片方または両方のテスト動画のロードまたは処理に失敗しました。終了します。")
+        exit()
+
+    if video_frames_front_chw.shape[0] != video_frames_side_chw.shape[0]:
+        min_len = min(video_frames_front_chw.shape[0], video_frames_side_chw.shape[0])
+        video_frames_front_chw = video_frames_front_chw[:min_len]
+        video_frames_side_chw = video_frames_side_chw[:min_len]
+        print(f"フレーム数を合わせるように調整しました: {min_len} フレーム。")
+
+    print(f"処理された正面動画テンソル形状: {video_frames_front_chw.shape} (T, C, H, W)")
+    print(f"処理された側面動画テンソル形状: {video_frames_side_chw.shape} (T, C, H, W)")
+
+    # モデル入力のためにバッチ次元を追加
+    input_front_video = video_frames_front_chw.unsqueeze(0).to(device)
+    input_side_video = video_frames_side_chw.unsqueeze(0).to(device)
+
+    print(f"モデル入力 正面動画形状: {input_front_video.shape} (B, T, C, H, W)")
+    print(f"モデル入力 側面動画形状: {input_side_video.shape} (B, T, C, H, W)")
+model.eval() # モデルを評価モードに設定
+
+with torch.no_grad(): # 推論のための勾配計算を無効化
+    # fusion_type に基づいてモデルに適切な入力を渡す
+    if fusion_type == 'single':
+        output = model(input_video_for_single_model) 
+        # model_class_num が 1 の場合、通常 Sigmoid を使用して確率を得る
+        probabilities = torch.sigmoid(output)
+        # single モデルの出力は (batch_size * num_frames, 1) になるため、平均を取る
+        predicted_probability = probabilities.mean().item()
+        # 0.5 を閾値としてクラスを判断
+        predicted_class_idx = 1 if predicted_probability >= 0.5 else 0
+        predicted_probabilities_array = np.array([1 - predicted_probability, predicted_probability]) # [健常確率, 疾患あり確率]
+    else:
+        # early_fusion, late_fusion, slow_fusion は両方の動画を入力
+        output = model(input_front_video, input_side_video)
+        
+        # model_class_num が 1 の場合
+        if num_classes == 1:
+            probabilities = torch.sigmoid(output)
+            predicted_probability = probabilities.squeeze().item()
+            predicted_class_idx = 1 if predicted_probability >= 0.5 else 0
+            predicted_probabilities_array = np.array([1 - predicted_probability, predicted_probability])
+        else:
+            # model_class_num が 2 以上の場合は softmax を使用 (この場合は num_classes は 1 なのでここには来ない)
+            probabilities = torch.softmax(output, dim=1)
+            predicted_class_idx = torch.argmax(probabilities, dim=1).item()
+            predicted_probabilities_array = probabilities.squeeze().cpu().numpy()
+
+# クラスラベル (0:健常, 1:疾患あり を仮定)
+class_labels = {0: '健常 (non_ASD)', 1: '疾患あり (ASD)'}
+predicted_label = class_labels.get(predicted_class_idx, '不明')
+
+print(f"\n--- 推論結果 ---")
+print(f"予測クラスインデックス: {predicted_class_idx}")
+print(f"予測ラベル: {predicted_label}")
+print(f"確率 (健常, 疾患あり): {predicted_probabilities_array}")
+plt.figure(figsize=(6, 4))
+classes = list(class_labels.values())
+y_pos = np.arange(len(classes))
+
+plt.bar(y_pos, predicted_probabilities_array, align='center', alpha=0.7)
+plt.xticks(y_pos, classes)
+plt.ylabel('確率')
+plt.title('疾患状態の予測確率')
+plt.ylim(0, 1)
+plt.grid(axis='y', linestyle='--')
+plt.show()
+
+print("\n--- 処理完了 ---")

@@ -122,16 +122,18 @@ class WalkDataModule(LightningDataModule):
         super().__init__()
 
         # use this for dataloader
-        self._TRAIN_PATH_A = opt.train_path_a
-        self._TRAIN_PATH_B = opt.train_path_b
+        self._TRAIN_PATH_A = opt.data.ap_data_path
+        self._TRAIN_PATH_B = opt.data.lat_data_path
 
-        self._BATCH_SIZE = opt.batch_size
-        self._NUM_WORKERS = opt.num_workers
-        self._IMG_SIZE = opt.img_size
+        self._BATCH_SIZE = opt.data.batch_size
+        self._NUM_WORKERS = opt.data.num_workers
+        self._IMG_SIZE = opt.data.img_size
 
         # frame rate
-        self._CLIP_DURATION = opt.clip_duration
-        self.uniform_temporal_subsample_num = opt.uniform_temporal_subsample_num
+        self._CLIP_DURATION = opt.data.clip_duration
+        self.uniform_temporal_subsample_num = opt.data.uniform_temporal_subsample_num
+
+        self.current_fold = opt.train.current_fold
 
         self.train_transform = Compose(
             [

@@ -33,7 +33,12 @@ from torchmetrics.classification import (
     MulticlassPrecision,
     MulticlassRecall,
     MulticlassF1Score,
-    MulticlassConfusionMatrix
+    MulticlassConfusionMatrix,
+    BinaryAccuracy,
+    BinaryPrecision,
+    BinaryRecall,
+    BinaryF1Score,
+    BinaryConfusionMatrix,
 )
 
 import matplotlib.pyplot as plt 
@@ -47,14 +52,14 @@ class SingleTrainer(LightningModule):
 
         # return model type name
         self.model_type=hparams.model
-        self.img_size = hparams.img_size
+        self.img_size = hparams.data.img_size
 
-        self.lr=hparams.lr
-        self.num_class = hparams.model_class_num
-        self.uniform_temporal_subsample_num = hparams.uniform_temporal_subsample_num
+        self.lr=hparams.optimizer.lr
+        self.num_class = hparams.model.model_class_num
+        self.uniform_temporal_subsample_num = hparams.data.uniform_temporal_subsample_num
 
-        self.fusion_method = hparams.fusion_method       
-
+        self.fusion_method = hparams.train.experiment
+        
         if self.fusion_method == 'slow_fusion':
             self.model = MakeVideoModule(hparams)
 
@@ -66,19 +71,20 @@ class SingleTrainer(LightningModule):
             self.model = early_fusion(hparams)
         elif self.fusion_method == 'late_fusion':
             self.model = late_fusion(hparams)
-        else:
-            raise ValueError('no choiced model selected, get {self.fusion_method}')
+        # else:
+        #     raise ValueError('no choiced model selected, get {self.fusion_method}')
 
-        self.transfor_learning = hparams.transfor_learning
+        # self.transfor_learning = hparams.transfor_learning
 
         # save the hyperparameters to the file and ckpt
         self.save_hyperparameters()
 
         # select the metrics
-        self._accuracy = get_Accuracy(self.num_class)
-        self._precision = get_Precision(self.num_class)
-        self._confusion_matrix = get_Confusion_Matrix()
-        self.f1_score = torchmetrics.F1Score(task="binary", num_classes=self.num_class)
+        self._accuracy = BinaryAccuracy()
+        self._precision = BinaryPrecision()
+        self._recall = BinaryRecall()
+        self._f1_score = BinaryF1Score()
+        self._confusion_matrix = BinaryConfusionMatrix()
         
     def forward(self, x):
         return self.model(x)
@@ -106,7 +112,7 @@ class SingleTrainer(LightningModule):
         fusion_video = torch.cat([video_a, video_b], dim=2) # b, t, c, h, w 
         fusion_video = fusion_video.transpose(2, 1) # b, t, c, h, w > b, c, t, h, w 
 
-        if self.fusion_method == 'single_frame': 
+        if self.fusion_method == 'single': 
             # for single frame
             label = batch['label'].detach()
 
@@ -229,7 +235,7 @@ class SingleTrainer(LightningModule):
         # input and label
         video = batch['video'].detach() # b, c, t, h, w
 
-        if self.fusion_method == 'single_frame': 
+        if self.fusion_method == 'single': 
             label = batch['label'].detach()
 
             # when batch > 1, for multi label, to repeat label in (bxt)
