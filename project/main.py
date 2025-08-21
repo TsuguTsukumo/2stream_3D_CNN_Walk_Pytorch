@@ -92,7 +92,7 @@ def train(hparams: DictConfig):
     model_check_point = ModelCheckpoint(
         filename="{epoch}-{val/loss:.2f}-{val/acc:.4f}",
         auto_insert_metric_name=False,
-        monitor="val/acc",
+        monitor="val/acc_epoch",
         mode="max",
         save_last=False,
         save_top_k=2,
@@ -100,7 +100,7 @@ def train(hparams: DictConfig):
 
     # define the early stop.
     early_stopping = EarlyStopping(
-        monitor="val/acc",
+        monitor="val/acc_epoch",
         patience=3,
         mode="max",
     )
@@ -109,6 +109,7 @@ def train(hparams: DictConfig):
         devices=hparams.device.device,
         strategy="auto",
         accelerator="gpu",
+        num_sanity_val_steps=0,
         max_epochs=hparams.train.max_epochs,
         logger=tb_logger,
         check_val_every_n_epoch=1,
@@ -121,7 +122,7 @@ def train(hparams: DictConfig):
 
     pl_trainer.fit(trainer, data_module)
 
-    pl_trainer.test(trainer, data_module, ckpt_path="best")
+    # pl_trainer.test(trainer, data_module, ckpt_path="best")
 
 
 @hydra.main(

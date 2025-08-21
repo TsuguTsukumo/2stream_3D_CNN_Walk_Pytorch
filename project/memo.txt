@@ -1,0 +1,2 @@
+export PYTHONPATH=/workspace/project
+tensorboard --logdir=/workspace/logs/resnet/single/2025-06-23/11-27-11/fold0/version_0

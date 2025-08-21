@@ -29,17 +29,18 @@ class single(nn.Module):
 
         super().__init__()
 
-        self.model_class_num = hparams.model_class_num
+        self.model_class_num = hparams.model.model_class_num
         self.resnet_model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet50', pretrained=True)
 
         self.resnet_model.fc = torch.nn.Linear(2048, self.model_class_num, bias=True)
 
     def forward(self, img: torch.Tensor) -> torch.Tensor:
 
-        b, c, t, h, w = img.size()
+        b, t, c, h, w = img.size()
         # make frame to batch image, wich (b*t, c, h, w)
-        batch_imgs = img.permute(0, 2, 1, 3, 4).reshape(-1, c, h, w)
-
+        # batch_imgs = img.permute(0, 2, 1, 3, 4).reshape(-1, c, h, w)
+        batch_imgs = img.reshape(b * t, c, h, w)
+        
         output = self.resnet_model(batch_imgs)
 
         return output

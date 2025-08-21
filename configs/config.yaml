@@ -18,8 +18,8 @@ optimizer:
   beta2: 0.999
 
 data:
-  ap_data_path: //workspace/data/Cross_Validation/ex_20250116_ap_organized # front view dataset path
-  lat_data_path: /workspace/data/Cross_Validation/ex_20250116_lat_organized # side view dataset path
+  ap_data_path: /workspace/data/Cross_Validation/ex_20250116_ap_organized # front view dataset path
+  lat_data_path: /workspace/data/Cross_Validation/ex_20250116_ap_organized # side view dataset path
 
   num_workers: 7
   img_size: 224

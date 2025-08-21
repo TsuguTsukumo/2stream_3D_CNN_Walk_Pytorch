@@ -58,25 +58,8 @@ class SingleTrainer(LightningModule):
         self.num_class = hparams.model.model_class_num
         self.uniform_temporal_subsample_num = hparams.data.uniform_temporal_subsample_num
 
-        self.fusion_method = hparams.train.experiment
+        self.model = single(hparams)
         
-        if self.fusion_method == 'slow_fusion':
-            self.model = MakeVideoModule(hparams)
-
-            # select the network structure 
-            if self.model_type == 'resnet':
-                self.model=self.model.make_walk_resnet()
-
-        elif self.fusion_method == 'early_fusion':
-            self.model = early_fusion(hparams)
-        elif self.fusion_method == 'late_fusion':
-            self.model = late_fusion(hparams)
-        # else:
-        #     raise ValueError('no choiced model selected, get {self.fusion_method}')
-
-        # self.transfor_learning = hparams.transfor_learning
-
-        # save the hyperparameters to the file and ckpt
         self.save_hyperparameters()
 
         # select the metrics
@@ -85,6 +68,10 @@ class SingleTrainer(LightningModule):
         self._recall = BinaryRecall()
         self._f1_score = BinaryF1Score()
         self._confusion_matrix = BinaryConfusionMatrix()
+        
+        self.test_preds_sigmoid_list = []
+        self.test_labels_list = []
+        self.test_raw_preds_list = []
         
     def forward(self, x):
         return self.model(x)
@@ -102,47 +89,40 @@ class SingleTrainer(LightningModule):
         '''
         
         # input and label
-        self._check_info(batch=batch)
-        label = batch['a']['label']
+        # self._check_info(batch=batch)
         
-        # input and label
-        video_a = batch['a']['video'] # b, c, t, h, w
-        video_b = batch['b']['video'] # b, c, t, h, w
+        label = batch['label'].detach() # b, class_num
+        label = label.repeat_interleave(self.uniform_temporal_subsample_num).squeeze()
+
+        video = batch['video'].detach()  # b, t, c, h, w
+        video = video.permute(0, 2, 1, 3, 4).contiguous()
+        # print(f"Shape of 'video' tensor received by trainer: {video.shape}")
         
-        fusion_video = torch.cat([video_a, video_b], dim=2) # b, t, c, h, w 
-        fusion_video = fusion_video.transpose(2, 1) # b, t, c, h, w > b, c, t, h, w 
-
-        if self.fusion_method == 'single': 
-            # for single frame
-            label = batch['label'].detach()
-
-            # when batch > 1, for multi label, to repeat label in (bxt)
-            label = label.repeat_interleave(self.uniform_temporal_subsample_num).squeeze()
-
-        else:
-            label = batch['a']['label'] # b, class_num
-
+        current_batch_size = video.shape[0]
+        
         # classification task
-        y_hat = self.model(fusion_video)
-
-        # when torch.size([1]), not squeeze.
-        if y_hat.size()[0] != 1 or len(y_hat.size()) != 1 :
-            y_hat = y_hat.squeeze(dim=-1)
-            
-            y_hat_sigmoid = torch.sigmoid(y_hat)
+        preds = self.model(video)
         
-        else:
-            y_hat_sigmoid = torch.sigmoid(y_hat)
-
-        loss = F.binary_cross_entropy_with_logits(y_hat, label.float())
+        preds = preds.squeeze(dim=-1)
+        preds_sigmoid = torch.sigmoid(preds)
+        
+        train_loss = F.binary_cross_entropy_with_logits(preds, label.float())
         # soft_margin_loss = F.soft_margin_loss(y_hat_sigmoid, label.float())
 
-        accuracy = self._accuracy(y_hat_sigmoid, label)
-        precision = self._precision(y_hat_sigmoid, label)
+        accuracy = self._accuracy(preds_sigmoid, label)
+        precision = self._precision(preds_sigmoid, label)
+        val_f1 = self._f1_score(preds_sigmoid, label)
 
-        self.log_dict({'train_loss': loss, 'train_acc': accuracy, 'train_precision': precision}, on_step=True, on_epoch=True)
+        # self.log_dict({'train_loss': train_loss, 'train_acc': accuracy, 'train_precision': precision}, on_step=True, on_epoch=True)
+        # self.log_dict({'train_loss': train_loss, 'train_acc': accuracy, 'train_precision': precision}, on_epoch=True, sync_dist=True, batch_size=current_batch_size)
+        # self.log("train_loss", train_loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size=current_batch_size)
+        # self.log("train_acc", accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size=current_batch_size)
+        # self.log("train_precision", precision, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size=current_batch_size)
+        self.log_dict({'train/f1:': val_f1, 'train/loss': train_loss, 'train/acc': accuracy, 'train/precision': precision}, on_step=True, on_epoch=True, batch_size=label.size(0))
+        # self.log("train_loss", train_loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size=current_batch_size)
 
-        return loss
+
+        return train_loss
 
     # def training_epoch_end(self, outputs) -> None:
     #     '''
@@ -170,29 +150,23 @@ class SingleTrainer(LightningModule):
         '''
 
         # * Check the info from two date 
-        self._check_info(batch=batch)
-        label = batch['a']['label']
+        # self._check_info(batch=batch)
+        label = batch['label']
+        label = label.repeat_interleave(self.uniform_temporal_subsample_num).squeeze()
 
         # input and label
-        video_a = batch['a']['video'] # b, t, c, h, w
-        video_b = batch['b']['video'] # b, t, c, h, w
-
-        # TODO: fuse the video data with lat and ap.
-        fusion_video = torch.cat([video_a, video_b], dim=2) # b, t, c, h, w 
-        fusion_video = fusion_video.transpose(2, 1) # b, t, c, h, w > b, c, t, h, w 
-        self.model.eval()
+        video = batch['video']
+        video = video.permute(0, 2, 1, 3, 4).contiguous()# b, t, c, h, w
         
+        current_batch_size = video.shape[0]
+        # print(f"Shape of 'video' tensor received by trainer: {video.shape}")
         # pred the video frames
+        
         with torch.no_grad():
-            preds = self.model(fusion_video)
+            preds = self.model(video)
 
-        # when torch.size([1]), not squeeze.
-        if preds.size()[0] != 1 or len(preds.size()) != 1 :
-            preds = preds.squeeze(dim=-1)
-            preds_sigmoid = torch.sigmoid(preds)
-        else:
-            preds_sigmoid = torch.sigmoid(preds)
-
+        preds = preds.squeeze(dim=-1)
+        preds_sigmoid = torch.sigmoid(preds)
         # squeeze(dim=-1) to keep the torch.Size([1]), not null.
         val_loss = F.binary_cross_entropy_with_logits(preds, label.float())
 
@@ -203,13 +177,20 @@ class SingleTrainer(LightningModule):
 
         confusion_matrix = self._confusion_matrix(preds_sigmoid, label)
 
-        val_f1 = self.f1_score(preds_sigmoid, label)
+        val_f1 = self._f1_score(preds_sigmoid, label)
+        # print(f"[DEBUG] Epoch: {self.current_epoch}, Val Loss: {val_loss.item():.4f}, Val Acc: {accuracy.item():.4f}")
         # log the val loss and val acc, in step and in epoch.
-        self.log_dict({'val_f1:': val_f1, 'val_loss': val_loss, 'val_acc': accuracy, 'val_precision': precision}, on_step=True, on_epoch=True)
-        
-        return accuracy
+        # self.log_dict({'val_f1:': val_f1, 'val_loss': val_loss, 'val_acc': accuracy, 'val_precision': precision}, on_step=True, on_epoch=True, batch_size=current_batch_size)
+        # self.log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size=current_batch_size)
+        # self.log("val_acc", accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size= current_batch_size)
+        # self.log("val_f1", val_f1, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True, batch_size= current_batch_size)
+        # self.log("val_precission", precision, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True, batch_size= current_batch_size)
+        self.log_dict({'val/f1:': val_f1, 'val/loss': val_loss, 'val/acc': accuracy, 'val/precision': precision}, on_step=True, on_epoch=True, batch_size=label.size(0))
 
-    def validation_epoch_end(self, outputs):
+        
+        # return val_loss, accuracy
+
+    def on_validation_epoch_end(self):
         pass
         
         # val_metric = torch.stack(outputs, dim=0)
@@ -234,31 +215,22 @@ class SingleTrainer(LightningModule):
 
         # input and label
         video = batch['video'].detach() # b, c, t, h, w
-
-        if self.fusion_method == 'single': 
-            label = batch['label'].detach()
-
-            # when batch > 1, for multi label, to repeat label in (bxt)
-            label = label.repeat_interleave(self.uniform_temporal_subsample_num).squeeze()
-
-        else:
-            label = batch['label'].detach() # b, class_num
+        video = video.permute(0, 2, 1, 3, 4).contiguous()
+        label = batch['label'].detach()
+        # when batch > 1, for multi label, to repeat label in (bxt)
+        label = label.repeat_interleave(self.uniform_temporal_subsample_num).squeeze()
 
         self.model.eval()
 
         # pred the video frames
         with torch.no_grad():
             preds = self.model(video)
-
-        # when torch.size([1]), not squeeze.
-        if preds.size()[0] != 1 or len(preds.size()) != 1 :
-            preds = preds.squeeze(dim=-1)
-            preds_sigmoid = torch.sigmoid(preds)
-        else:
-            preds_sigmoid = torch.sigmoid(preds)
+        
+        preds = preds.squeeze(dim=-1)
+        preds_sigmoid = torch.sigmoid(preds)
 
         # squeeze(dim=-1) to keep the torch.Size([1]), not null.
-        val_loss = F.binary_cross_entropy_with_logits(preds, label.float())
+        test_loss = F.binary_cross_entropy_with_logits(preds, label.float())
 
         # calc the metric, function from torchmetrics
         accuracy = self._accuracy(preds_sigmoid, label)
@@ -268,41 +240,58 @@ class SingleTrainer(LightningModule):
         confusion_matrix = self._confusion_matrix(preds_sigmoid, label)
 
         # log the val loss and val acc, in step and in epoch.
-        self.log_dict({'test_loss': val_loss, 'test_acc': accuracy, 'test_precision': precision}, on_step=False, on_epoch=True)
+        self.log_dict({'test_loss': test_loss, 'test_acc': accuracy, 'test_precision': precision}, on_step=False, on_epoch=True)
 
         return {
             'pred': preds_sigmoid.tolist(),
             'label': label.tolist()
         }
         
-    def test_epoch_end(self, outputs):
-        #todo try to store the pred or confusion matrix
-        pred_list = []
-        label_list = []
+    def on_test_epoch_end(self):
+        '''
+        テストエポックの最後に呼び出されるフック
+        test_stepで保存した全ての予測とラベルを集計し、最終的なメトリックを計算してログに記録
+        '''
+        # 保存された全ての予測とラベルを結合
+        all_preds_sigmoid = torch.cat(self.test_preds_sigmoid_list)
+        all_labels = torch.cat(self.test_labels_list)
+        all_raw_preds = torch.cat(self.test_raw_preds_list) # 保存した生の予測値を使用
 
-        for i in outputs:
-            for number in i['pred']:
-                if number > 0.5:
-                    pred_list.append(1)
-                else:
-                    pred_list.append(0)
-            for number in i['label']:
-                label_list.append(number)
+        # 最終損失の計算 (生の予測値を使用するのが数値的に安定)
+        final_test_loss = F.binary_cross_entropy_with_logits(all_raw_preds, all_labels.float())
 
-        pred = torch.tensor(pred_list)
-        label = torch.tensor(label_list)
+        # 最終的なメトリックの計算 (全データセットに対して一度に)
+        final_accuracy = self._accuracy(all_preds_sigmoid, all_labels)
+        final_precision = self._precision(all_preds_sigmoid, all_labels)
+        final_f1 = self._f1_score(all_preds_sigmoid, all_labels)
+        final_confusion_matrix_tensor = self._confusion_matrix(all_preds_sigmoid, all_labels)
 
-        cm = confusion_matrix(label, pred)
-        ax = sns.heatmap(cm, annot=True, fmt="3d")
+        # 最終的なメトリックをログに記録
+        self.log_dict({
+            'final_test/loss': final_test_loss,
+            'final_test/acc': final_accuracy,
+            'final_test/precision': final_precision,
+            'final_test/f1': final_f1,
+            # 混同行列はTensorBoardなどに直接プロットする場合が多い
+        }, on_step=False, on_epoch=True)
 
-        ax.set_title('confusion matrix')
-        ax.set(xlabel="pred class", ylabel="ground truth")
-        ax.xaxis.tick_top()
-        plt.show()
-        plt.savefig('test.png')
+        # [追加]: 混同行列の描画と保存ロジックをここに移動
+        # torchmetricsのConfusionMatrixは直接プロット機能を持っている場合が多い
+        # あるいはnumpyに変換してmatplotlib/seabornで描画
+        cm_numpy = final_confusion_matrix_tensor.cpu().numpy()
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(cm_numpy, annot=True, fmt="d", cmap="Blues") # fmt="d"で整数表示
+        plt.title('Confusion Matrix')
+        plt.xlabel('Predicted Label')
+        plt.ylabel('True Label')
+        plt.savefig('test_confusion_matrix.png')
+        plt.close() # メモリ解放のためにプロットを閉じる
 
-        return cm 
-
+        # 次のテスト実行のためにリストをクリア
+        self.test_preds_sigmoid_list.clear()
+        self.test_labels_list.clear()
+        self.test_raw_preds_list.clear() # 生の予測値リストもクリア
+    
     def configure_optimizers(self):
         '''
         configure the optimizer and lr scheduler
@@ -318,7 +307,7 @@ class SingleTrainer(LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer),
-                "monitor": "val_loss",
+                "monitor": "val/loss",
             },
         }
         # return torch.optim.SGD(self.parameters(), lr=self.lr)
@@ -335,36 +324,37 @@ class SingleTrainer(LightningModule):
         """        
 
         # * Check the info from two date 
-        video_info_a = batch['a']
-        video_info_b = batch['b']
+        #video_info_a = batch['ap']
+        #video_info_b = batch['lat']
         
         # print('vedeoname_a', video_info_a["video_name"])
         # print('vedeoname_b', video_info_b["video_name"])
         
         # * check tensor shape 
-        video_a = video_info_a["video"]
-        video_b = video_info_b["video"]
+        #video_a = video_info_a["video"]
+        # video_b = video_info_b["video"]
         
-        assert video_a.shape == video_b.shape
+        # assert video_a.shape == video_b.shape
 
         # * check label 
-        label_a = video_info_a["label"]
-        label_b = video_info_b["label"]
+        
+        #label_a = video_info_a["label"]
+        # label_b = video_info_b["label"]
         
         # print('label_a:', label_a)
         # print('label_b:', label_b)
 
-        assert label_a.shape ==  label_b.shape 
+        # assert label_a.shape ==  label_b.shape 
         
-        for i in range(len(label_a)):
-            assert label_a[i] == label_b[i]
+        # for i in range(len(label_a)):
+        #     assert label_a[i] == label_b[i]
         
         # * check video name 
-        video_name_a = video_info_a["video_name"]
-        video_name_b = video_info_b["video_name"]
+        # video_name_a = video_info_a["video_name"]
+        # video_name_b = video_info_b["video_name"]
 
-        assert len(video_name_a) == len(video_name_b)
+        # assert len(video_name_a) == len(video_name_b)
         
-        for i in range(len(video_name_a)):
-            assert video_name_a[i] == video_name_b[i] 
+        # for i in range(len(video_name_a)):
+        #     assert video_name_a[i] == video_name_b[i] 
         

@@ -91,11 +91,10 @@ class SlowFusionTrainer(LightningModule):
         label = batch['ap']['label']
 
         # input and label
-        video_a = batch['ap']['video'] # b, t, c, h, w
-        video_b = batch['lat']['video'] # b, t, c, h, w
-        
+        video = batch['ap']['video'] # b, t, c, h, w
+            
         # * predict the video frames
-        preds = self.model(video_a, video_b)
+        preds = self.model(video)
         
         # when torch.size([1]), not squeeze.
         preds = preds.squeeze(dim=-1)
@@ -134,12 +133,12 @@ class SlowFusionTrainer(LightningModule):
         label = batch['ap']['label']
 
         # input and label
-        video_a = batch['ap']['video'] # b, t, c, h, w
-        video_b = batch['lat']['video'] # b, t, c, h, w
+        video = batch['ap']['video'] # b, t, c, h, w
+        
         
         # * predict the video frames
         with torch.no_grad():
-            preds = self.model(video_a, video_b)
+            preds = self.model(video)
         
         preds = preds.squeeze(dim=-1)
         preds_sigmoid = torch.sigmoid(preds)
@@ -183,12 +182,11 @@ class SlowFusionTrainer(LightningModule):
         label = batch['ap']['label']
 
         # input and label
-        video_a = batch['ap']['video'] # b, t, c, h, w
-        video_b = batch['lat']['video'] # b, t, c, h, w
+        video = batch['ap']['video'] # b, t, c, h, w
         
         # * predict the video frames
         with torch.no_grad():
-            preds = self.model(video_a, video_b)
+            preds = self.model(video)
         
         # when torch.size([1]), not squeeze.
         preds = preds.squeeze(dim=-1)
