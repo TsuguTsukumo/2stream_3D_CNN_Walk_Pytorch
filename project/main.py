@@ -101,7 +101,7 @@ def train(hparams: DictConfig):
     # define the early stop.
     early_stopping = EarlyStopping(
         monitor="val/acc_epoch",
-        patience=3,
+        patience=10,
         mode="max",
     )
 

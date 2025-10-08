@@ -19,7 +19,7 @@ optimizer:
 
 data:
   ap_data_path: /workspace/data/Cross_Validation/ex_20250116_ap_organized # front view dataset path
-  lat_data_path: /workspace/data/Cross_Validation/ex_20250116_ap_organized # side view dataset path
+  lat_data_path: /workspace/data/Cross_Validation/ex_20250116_lat_organized # side view dataset path
 
   num_workers: 7
   img_size: 224
@@ -40,7 +40,7 @@ device:
 train:
   max_epochs: 20 # numer of epochs of training
 
-  experiment: single # choices=[single, early_fusion, late_fusion, slow_fusion], help='the different feature fusion method'
+  experiment: late_fusion # choices=[single, early_fusion, late_fusion, slow_fusion], help='the different feature fusion method'
   log_path: logs/${model.backbone}/${train.experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}
 
   fast_dev_run: False # if use the fast_dev_run
