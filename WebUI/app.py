@@ -45,6 +45,7 @@ MODEL_PATHS = {
     "late_fusion": "/workspace/logs/resnet/late_fusion/2025-10-07/05-01-13/fold4/version_0/checkpoints/1-0.72-0.6206.ckpt",
     "slow_fusion": "/workspace/project/logs/resnet/slow_fusion/2025-02-03/05-15-18/fold0/version_0/checkpoints/8-0.94-0.5779.ckpt",
 }
+
 # ==========
 # デバイス設定 (GPU or CPU)
 # ==========
@@ -181,11 +182,9 @@ def get_heatmaps_and_focus(cam_model, input_tensor_5d, bboxes_on_canvas):
         if bbox_h > 0:
             head_end_y = bbox_y + int(bbox_h * 0.25)
             torso_end_y = bbox_y + int(bbox_h * 0.6)
-            legs_end_y = bbox_y + bbox_h
-            
             clip_sums["頭部"] += np.sum(resized_cam_map[bbox_y:head_end_y, bbox_x:bbox_x+bbox_w])
             clip_sums["胴体"] += np.sum(resized_cam_map[head_end_y:torso_end_y, bbox_x:bbox_x+bbox_w])
-            clip_sums["脚部"] += np.sum(resized_cam_map[torso_end_y:legs_end_y, bbox_x:bbox_x+bbox_w])
+            clip_sums["脚部"] += np.sum(resized_cam_map[torso_end_y:bbox_y+bbox_h, bbox_x:bbox_x+bbox_w])
 
     focus_part = max(clip_sums, key=clip_sums.get) if sum(clip_sums.values()) > 0 else "不明"
 
@@ -215,55 +214,65 @@ def create_focus_illustration_html(focus_part, view_type, is_asd):
                 <rect id="legs-front-right" class="body" x="78" y="215" width="32" height="150" rx="10" fill="{fills['legs']}"/>
             </g>
             <text x="75" y="390" font-family="sans-serif" font-size="20" text-anchor="middle">正面</text></svg>"""
-    else: # side view
-        # viewBoxを広げ、全体を中央に配置するよう調整
+    else:
         svg_code = f"""<svg width="180" height="400" viewBox="0 0 180 400" xmlns="http://www.w3.org/2000/svg">
             <style>.body {{ stroke: #555; stroke-width:2; }}</style><title>側面図</title>
-            <g id="figure-side" transform="translate(20, 0)"> <!-- 全体をさらに右にずらす --><!-- Far limbs (opacity reduced) --><rect id="arm-side-far" class="body" x="65" y="95" width="20" height="110" rx="10" transform="rotate(30, 75, 100)" fill="{fills['torso']}" opacity="0.7"/>
+            <g id="figure-side" transform="translate(20, 0)">
+                <rect id="arm-side-far" class="body" x="65" y="95" width="20" height="110" rx="10" transform="rotate(30, 75, 100)" fill="{fills['torso']}" opacity="0.7"/>
                 <rect id="leg-side-far" class="body" x="63" y="210" width="25" height="150" rx="10" transform="rotate(-20, 75, 215)" fill="{fills['legs']}" opacity="0.7"/>
-
-                <!-- Body --><circle id="head-side" class="body" cx="75" cy="50" r="35" fill="{fills['head']}"/>
+                <circle id="head-side" class="body" cx="75" cy="50" r="35" fill="{fills['head']}"/>
                 <rect id="torso-side" class="body" x="60" y="90" width="50" height="120" rx="10" fill="{fills['torso']}"/>
-                
-                <!-- Near limbs --><rect id="arm-side-near" class="body" x="65" y="95" width="20" height="110" rx="10" transform="rotate(-40, 75, 100)" fill="{fills['torso']}"/>
+                <rect id="arm-side-near" class="body" x="65" y="95" width="20" height="110" rx="10" transform="rotate(-40, 75, 100)" fill="{fills['torso']}"/>
                 <rect id="leg-side-near" class="body" x="63" y="210" width="25" height="150" rx="10" transform="rotate(30, 75, 215)" fill="{fills['legs']}"/>
             </g>
-            <text x="75" y="390" font-family="sans-serif" font-size="20" text-anchor="middle">側面</text></svg>"""
+            <text x="95" y="390" font-family="sans-serif" font-size="20" text-anchor="middle">側面</text></svg>"""
     return f"<div style='text-align:center;'>{svg_code}</div>"
 
 # ==========
 # 実行パイプライン
 # ==========
-def run_pipeline(model_type, video_front, video_side, crop_mode, progress=gr.Progress()):
-    def make_error_return(message):
-        return ([], [], [], [], 0, None, None, message, None, None,
-                gr.update(interactive=False), gr.update(interactive=False), "", gr.update())
+def run_pipeline(model_type, video_front, video_side, crop_mode):
+    yield {
+        submit_btn: gr.update(interactive=False),
+        processing_col: gr.update(visible=True),
+        result_tabs: gr.update(visible=False),
+        image_output: None, abnormal_image_output: None, summary_output: None,
+        illustration_front: None, illustration_side: None, display_label: "",
+        prev_btn: gr.update(interactive=False), next_btn: gr.update(interactive=False),
+    }
 
-    progress(0, desc=f"'{model_type}'モデルを読み込み中...")
+    def make_error_return(message):
+        return {
+            submit_btn: gr.update(value=message, interactive=True),
+            processing_col: gr.update(visible=False),
+            result_tabs: gr.update(visible=True, selected=0)
+        }
+
     clf_model = load_model(model_type)
-    if clf_model is None: return make_error_return(f"❌ '{model_type}'のモデル読み込みに失敗しました。")
+    if clf_model is None:
+        yield make_error_return(f"❌ '{model_type}'のモデル読み込みに失敗しました。")
+        return
 
     is_fusion, is_single = "fusion" in model_type, "single" in model_type
     single_front_cam_model, single_side_cam_model = None, None
     if is_fusion:
-        progress(0.1, desc="CAM用Singleモデルを読み込み中...")
         single_front_cam_model, single_side_cam_model = load_model("single_front"), load_model("single_side")
 
     cap_front, cap_side = None, None
     if is_fusion or "front" in model_type:
-        if not video_front: return make_error_return("❌ 正面動画が必要です。")
+        if not video_front:
+            yield make_error_return("❌ 正面動画が必要です。")
+            return
         cap_front = cv2.VideoCapture(video_front)
     if is_fusion or "side" in model_type:
-        if not video_side: return make_error_return("❌ 側面動画が必要です。")
+        if not video_side:
+            yield make_error_return("❌ 側面動画が必要です。")
+            return
         cap_side = cv2.VideoCapture(video_side)
 
     fps = cap_front.get(cv2.CAP_PROP_FPS) if cap_front else cap_side.get(cv2.CAP_PROP_FPS)
     if fps == 0: fps = 30
     
-    total_frames = float('inf')
-    if cap_front: total_frames = min(total_frames, cap_front.get(cv2.CAP_PROP_FRAME_COUNT))
-    if cap_side: total_frames = min(total_frames, cap_side.get(cv2.CAP_PROP_FRAME_COUNT))
-
     all_composite_images, time_interval_labels, all_scores, all_focus_parts = [], [], [], []
     all_clip_sums_front, all_clip_sums_side = [], []
     frame_number, clip_duration_frames, uniform_temporal_subsample_num = 0, int(fps), 8
@@ -281,9 +290,6 @@ def run_pipeline(model_type, video_front, video_side, crop_mode, progress=gr.Pro
         if (cap_front and len(frames_for_clip_front) < clip_duration_frames) or \
            (cap_side and len(frames_for_clip_side) < clip_duration_frames):
             break
-            
-        current_second = frame_number / fps
-        progress(frame_number / total_frames, desc=f"{current_second:.1f}秒地点を処理中...")
 
         def sample_and_process_clip(clip_frames, crop_mode):
             indices = np.linspace(0, len(clip_frames) - 1, num=uniform_temporal_subsample_num, dtype=int)
@@ -314,6 +320,7 @@ def run_pipeline(model_type, video_front, video_side, crop_mode, progress=gr.Pro
         
         logit = outputs.mean().item()
         prob_for_display = 1 / (1 + np.exp(-logit))
+        current_second = frame_number / fps
         interval_label, _ = f"{current_second:.1f}-{current_second + 1:.1f}s", time_interval_labels.append(f"{current_second:.1f}-{current_second + 1:.1f}s")
         all_scores.append(prob_for_display)
         
@@ -341,7 +348,9 @@ def run_pipeline(model_type, video_front, video_side, crop_mode, progress=gr.Pro
     if cap_front: cap_front.release()
     if cap_side: cap_side.release()
 
-    if not all_scores: return make_error_return("❌ 処理できるクリップがありませんでした。")
+    if not all_scores:
+        yield make_error_return("❌ 処理できるクリップがありませんでした。")
+        return
     
     overall_score = np.mean(all_scores)
     overall_label, label_color = ("ASDの傾向あり", "#E53E3E") if overall_score > 0.5 else ("ASDの傾向なし", "#38A169")
@@ -373,13 +382,25 @@ def run_pipeline(model_type, video_front, video_side, crop_mode, progress=gr.Pro
         **スコア:** {all_scores[most_abnormal_index]:.4f}</div></div>"""
 
     display_label_text = f"区間: {time_interval_labels[0]} | スコア: {all_scores[0]:.4f} | 注目部位: {all_focus_parts[0]}"
-    image_label = "上段: 入力, 下段: CAM" if is_single else "1,3段目: 入力(正,側), 2,4段目: CAM(正,側)"
     
-    return (all_composite_images, time_interval_labels, all_scores, all_focus_parts, 0, all_composite_images[0],
-            most_abnormal_image, summary_markdown, 
-            create_focus_illustration_html(most_common_front, "front", overall_score > 0.5),
-            create_focus_illustration_html(most_common_side, "side", overall_score > 0.5),
-            gr.update(interactive=False), gr.update(interactive=len(all_composite_images) > 1), display_label_text, gr.update(label=image_label))
+    yield {
+        submit_btn: gr.update(value="実行", interactive=True),
+        processing_col: gr.update(visible=False),
+        result_tabs: gr.update(visible=True, selected=0),
+        image_state: all_composite_images,
+        interval_state: time_interval_labels,
+        scores_state: all_scores,
+        focus_parts_state: all_focus_parts,
+        current_index_state: 0,
+        image_output: all_composite_images[0],
+        abnormal_image_output: most_abnormal_image,
+        summary_output: summary_markdown,
+        illustration_front: create_focus_illustration_html(most_common_front, "front", overall_score > 0.5),
+        illustration_side: create_focus_illustration_html(most_common_side, "side", overall_score > 0.5),
+        prev_btn: gr.update(interactive=False),
+        next_btn: gr.update(interactive=len(all_composite_images) > 1),
+        display_label: display_label_text
+    }
 
 def navigate_images(current_index, direction, all_images, all_intervals, all_scores, all_focus_parts):
     if not all_images: return 0, None, gr.update(interactive=False), gr.update(interactive=False), ""
@@ -405,7 +426,49 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
             submit_btn = gr.Button("実行", variant="primary")
 
         with gr.Column(scale=2):
-            with gr.Tabs(selected=0) as tabs: # デフォルトを全体サマリー(id=0)に設定
+            processing_col = gr.Column(visible=False)
+            with processing_col:
+                gr.HTML("""
+                    <div style='display: flex; flex-direction: column; justify-content: center; align-items: center; height: 500px; text-align: center;'>
+                      <div style='position: relative; width: 150px; height: 200px;'>
+                        <!-- Walking Person -->
+                        <svg width="150" height="200" viewBox="0 0 150 200" style="position: absolute; top: 0; left: 0;">
+                          <style>
+                            #arm-left-anim { animation: anim-walk-arm-left 0.8s linear infinite; transform-origin: 75px 85px; }
+                            #arm-right-anim { animation: anim-walk-arm-right 0.8s linear infinite; transform-origin: 75px 85px; }
+                            #leg-left-anim { animation: anim-walk-leg-left 0.8s linear infinite; transform-origin: 75px 120px; }
+                            #leg-right-anim { animation: anim-walk-leg-right 0.8s linear infinite; transform-origin: 75px 120px; }
+                            @keyframes anim-walk-arm-left { 0% { transform: rotate(20deg); } 50% { transform: rotate(-20deg); } 100% { transform: rotate(20deg); } }
+                            @keyframes anim-walk-arm-right { 0% { transform: rotate(-20deg); } 50% { transform: rotate(20deg); } 100% { transform: rotate(-20deg); } }
+                            @keyframes anim-walk-leg-left { 0% { transform: rotate(-20deg); } 50% { transform: rotate(20deg); } 100% { transform: rotate(-20deg); } }
+                            @keyframes anim-walk-leg-right { 0% { transform: rotate(20deg); } 50% { transform: rotate(-20deg); } 100% { transform: rotate(20deg); } }
+                          </style>
+                          <g stroke="#888" stroke-width="8" stroke-linecap="round">
+                            <circle cx="75" cy="50" r="20" fill="#888"/>
+                            <line x1="75" y1="70" x2="75" y2="120"/>
+                            <line id="arm-left-anim" x1="75" y1="85" x2="50" y2="130"/>
+                            <line id="arm-right-anim" x1="75" y1="85" x2="100" y2="130"/>
+                            <line id="leg-left-anim" x1="75" y1="120" x2="50" y2="170"/>
+                            <line id="leg-right-anim" x1="75" y1="120" x2="100" y2="170"/>
+                          </g>
+                        </svg>
+                        <!-- Magnifying Glass -->
+                        <div style='position: absolute; top: 55px; left: 70px; font-size: 80px; animation: anim-pulse-magnify 1.5s infinite; transform-origin: center;'>
+                          🔍
+                        </div>
+                      </div>
+                      <p style='font-family: sans-serif; font-size: 24px; color: #555; margin-top: 20px;'>歩行データを分析しています...</p>
+                      <style>
+                        @keyframes anim-pulse-magnify {
+                          0% { transform: scale(1); }
+                          50% { transform: scale(1.2); }
+                          100% { transform: scale(1); }
+                        }
+                      </style>
+                    </div>""")
+
+            result_tabs = gr.Tabs(selected=0, visible=True)
+            with result_tabs:
                 with gr.TabItem("全体サマリー", id=0):
                     with gr.Row():
                         summary_output = gr.Markdown()
@@ -420,12 +483,17 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
                         next_btn = gr.Button("次の区間", interactive=False)
                     image_output = gr.Image(label="秒ごとの可視化結果", interactive=False)
 
+    outputs_list = [
+        submit_btn, processing_col, result_tabs,
+        image_state, interval_state, scores_state, focus_parts_state, 
+        current_index_state, image_output, abnormal_image_output, summary_output, 
+        illustration_front, illustration_side, prev_btn, next_btn, display_label
+    ]
+
     submit_btn.click(
         fn=run_pipeline,
         inputs=[model_type_input, video_input_front, video_input_side, crop_mode_input],
-        outputs=[image_state, interval_state, scores_state, focus_parts_state, current_index_state, image_output,
-                 abnormal_image_output, summary_output, illustration_front, illustration_side,
-                 prev_btn, next_btn, display_label, image_output]
+        outputs=outputs_list,
     )
     
     prev_btn.click(
@@ -444,3 +512,4 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
 
 if __name__ == "__main__":
     demo.launch()
+
