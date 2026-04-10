@@ -131,6 +131,10 @@ MNIST
 /logs
 /ckpt
 /analysis/logs
+/analysis/confusion_matrix_fold*.png
+/analysis/normalized_confusion_matrix_fold*.png
+/analysis/overall_confusion_matrix.png
+/analysis/overall_normalized_confusion_matrix.png
 *.gif
 *.mp4
 *.pt

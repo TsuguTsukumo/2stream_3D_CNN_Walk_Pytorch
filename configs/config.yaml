@@ -18,10 +18,11 @@ optimizer:
   beta2: 0.999
 
 data:
-  ap_data_path: /workspace/data/Cross_Validation/ex_20250116_ap_organized # front view dataset path
-  lat_data_path: /workspace/data/Cross_Validation/ex_20250116_lat_organized # side view dataset path
+  processed_root: /workspace/data/balanced_data
+  ap_data_path: ${data.processed_root}/ap # front view dataset path
+  lat_data_path: ${data.processed_root}/lat # side view dataset path
 
-  num_workers: 7
+  num_workers: 0
   img_size: 224
   batch_size: 8
 
@@ -40,9 +41,11 @@ device:
 train:
   max_epochs: 20 # numer of epochs of training
 
-  experiment: late_fusion # choices=[single, early_fusion, late_fusion, slow_fusion], help='the different feature fusion method'
+  run_mode: fit # choices=[fit, test]
+  experiment: single # choices=[single, early_fusion, late_fusion, slow_fusion], help='the different feature fusion method'
+  ckpt_path: null # required when run_mode=test
   log_path: logs/${model.backbone}/${train.experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}
 
   fast_dev_run: False # if use the fast_dev_run
   fold: 5 # the fold number of the cross validation
-  current_fold: ?? # the current fold number of the cross validation
+  current_fold: fold0 # the current fold number of the cross validation

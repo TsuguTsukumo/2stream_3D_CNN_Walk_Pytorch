@@ -24,7 +24,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np 
 
-from project.models.make_model import single
+try:
+    from project.models.make_model import single
+except ModuleNotFoundError:
+    from models.make_model import single
 
 from pytorch_lightning import LightningModule
 
@@ -228,6 +231,10 @@ class SingleTrainer(LightningModule):
         
         preds = preds.squeeze(dim=-1)
         preds_sigmoid = torch.sigmoid(preds)
+
+        self.test_preds_sigmoid_list.append(preds_sigmoid.detach().cpu())
+        self.test_labels_list.append(label.detach().cpu())
+        self.test_raw_preds_list.append(preds.detach().cpu())
 
         # squeeze(dim=-1) to keep the torch.Size([1]), not null.
         test_loss = F.binary_cross_entropy_with_logits(preds, label.float())
