@@ -6,26 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-SOURCE_DIR_MAP = {
-    "右足": "right_leg",
-    "左足": "left_leg",
-    "固定無し": "nothing",
-}
-
-VIDEO_VIEW_FILES = {
-    "above": "above.mp4",
-    "front": "front.mp4",
-    "side": "side.mp4",
-}
-
-RAW_LABEL_TO_CLASS = {
-    "nothing": "normal",
-    "right_leg": "weight",
-    "left_leg": "weight",
-}
-
 SEGMENT_FILE_PATTERN = re.compile(
-    r"^(?P<session>.+)_(?P<view>front|side|above)_(?P<segment>\d{4})$"
+    r"^(?P<session>.+)_(?P<view>front|side)_(?P<segment>\d{4})$"
 )
 
 
@@ -56,13 +38,34 @@ def reset_dir(path: Path) -> Path:
     return path
 
 
+def normalize_source_label(label: str) -> str:
+    normalized_key = label.strip().lower().replace("_", "-").replace(" ", "-")
+
+    if normalized_key == "asd":
+        return "ASD"
+    if normalized_key in {"non-asd", "asd-not", "asdnot"}:
+        return "ASD_not"
+    if normalized_key == "dhs":
+        return "DHS"
+    if normalized_key == "lcs":
+        return "LCS"
+    if normalized_key == "hipoa":
+        return "HipOA"
+
+    return label.strip().replace(" ", "_")
+
+
+def get_target_label(source_label: str) -> str:
+    return "ASD" if normalize_source_label(source_label) == "ASD" else "ASD_not"
+
+
 def parse_segment_video_path(path: Path) -> SegmentVideoFile | None:
     match = SEGMENT_FILE_PATTERN.match(path.stem)
     if match is None or len(path.parts) < 3:
         return None
 
-    source_label = path.parent.name
-    target_label = RAW_LABEL_TO_CLASS.get(source_label, source_label)
+    source_label = normalize_source_label(path.parent.name)
+    target_label = get_target_label(source_label)
 
     return SegmentVideoFile(
         path=path,

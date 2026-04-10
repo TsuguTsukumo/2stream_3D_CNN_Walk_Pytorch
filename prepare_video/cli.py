@@ -11,8 +11,8 @@ def build_help_text() -> str:
           python -m prepare_video <command> [options]
 
         Commands:
-          preprocess   Detect, crop, and segment synchronized raw videos
-          split        Split synchronized AP/LAT segments into fold datasets
+          preprocess   Detect and crop full AP/LAT videos into paired walk segments
+          split        Split paired walk segments into fold datasets
           balance      Downsample fold datasets while preserving AP/LAT pairs
           rename       Rename per-segment AP/LAT files to canonical names
         """
